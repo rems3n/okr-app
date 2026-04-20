@@ -3,11 +3,22 @@
 import Link from "next/link";
 import { useMemo, useState } from "react";
 
+import { OkrTree } from "@/components/okr/okr-tree";
+import { ObjectivePanel } from "@/components/okr/objective-panel";
+import {
+  LevelIcon,
+  PaceDot,
+  ProgressBar,
+} from "@/components/okr/objective-row";
 import { useCycles } from "@/hooks/use-cycles";
 import { useMembers } from "@/hooks/use-members";
 import { useObjectives } from "@/hooks/use-objectives";
 import { useTeams } from "@/hooks/use-teams";
 import { apiSend, ApiRequestError } from "@/lib/api/client";
+import type { Objective } from "@/lib/db/schema";
+import { pace, type Pace } from "@/lib/okr/progress";
+
+type View = "tree" | "list";
 
 export function ObjectivesPage({ currentUserId }: { currentUserId: string }) {
   const { cycles, isLoading: cyclesLoading } = useCycles();
@@ -19,7 +30,52 @@ export function ObjectivesPage({ currentUserId }: { currentUserId: string }) {
   const [cycleId, setCycleId] = useState<string | null>(null);
   const effectiveCycleId = cycleId ?? defaultCycleId;
   const { objectives, isLoading, mutate } = useObjectives(effectiveCycleId);
+  const { teams } = useTeams();
+  const { members } = useMembers();
+
+  const [view, setView] = useState<View>("tree");
+  const [teamFilter, setTeamFilter] = useState("");
+  const [ownerFilter, setOwnerFilter] = useState("");
+  const [statusFilter, setStatusFilter] = useState("");
+  const [search, setSearch] = useState("");
   const [creating, setCreating] = useState(false);
+  const [panelId, setPanelId] = useState<string | null>(null);
+
+  const cycle = cycles.find((c) => c.id === effectiveCycleId) ?? null;
+
+  const filtered = useMemo(() => {
+    return objectives.filter((o) => {
+      if (teamFilter && o.teamId !== teamFilter) return false;
+      if (ownerFilter && o.ownerUserId !== ownerFilter) return false;
+      if (statusFilter && o.status !== statusFilter) return false;
+      if (
+        search &&
+        !o.title.toLowerCase().includes(search.toLowerCase())
+      )
+        return false;
+      return true;
+    });
+  }, [objectives, teamFilter, ownerFilter, statusFilter, search]);
+
+  // Keep ancestor rows visible in tree mode so filtered rows still anchor
+  // to their parent chain. Without this, a filter that hides a parent
+  // would orphan its children.
+  const visibleForTree = useMemo(() => {
+    if (view !== "tree" || filtered.length === objectives.length) {
+      return filtered;
+    }
+    const keep = new Set(filtered.map((o) => o.id));
+    for (const o of filtered) {
+      let cur: Objective | undefined = o;
+      while (cur?.parentObjectiveId) {
+        const parent = objectives.find((p) => p.id === cur!.parentObjectiveId);
+        if (!parent) break;
+        keep.add(parent.id);
+        cur = parent;
+      }
+    }
+    return objectives.filter((o) => keep.has(o.id));
+  }, [view, filtered, objectives]);
 
   if (cyclesLoading) {
     return <p className="text-sm text-zinc-500">Loading…</p>;
@@ -42,15 +98,15 @@ export function ObjectivesPage({ currentUserId }: { currentUserId: string }) {
   }
 
   return (
-    <section className="space-y-4 max-w-5xl">
-      <header className="flex items-center justify-between">
+    <section className="space-y-4 max-w-6xl">
+      <header className="flex items-start justify-between gap-3 flex-wrap">
         <div>
           <h1 className="text-2xl font-semibold">Objectives</h1>
           <p className="text-sm text-zinc-500">
-            {objectives.length} in this cycle
+            {filtered.length} of {objectives.length} in this cycle
           </p>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2 flex-wrap">
           <select
             value={effectiveCycleId ?? ""}
             onChange={(e) => setCycleId(e.target.value || null)}
@@ -63,6 +119,22 @@ export function ObjectivesPage({ currentUserId }: { currentUserId: string }) {
               </option>
             ))}
           </select>
+          <div className="rounded-md border border-zinc-200 dark:border-zinc-700 text-xs overflow-hidden">
+            <button
+              type="button"
+              onClick={() => setView("tree")}
+              className={`px-2 py-1.5 ${view === "tree" ? "bg-zinc-100 dark:bg-zinc-800" : ""}`}
+            >
+              Tree
+            </button>
+            <button
+              type="button"
+              onClick={() => setView("list")}
+              className={`px-2 py-1.5 ${view === "list" ? "bg-zinc-100 dark:bg-zinc-800" : ""}`}
+            >
+              List
+            </button>
+          </div>
           {effectiveCycleId && (
             <button
               type="button"
@@ -74,6 +146,19 @@ export function ObjectivesPage({ currentUserId }: { currentUserId: string }) {
           )}
         </div>
       </header>
+
+      <FilterBar
+        search={search}
+        setSearch={setSearch}
+        teamFilter={teamFilter}
+        setTeamFilter={setTeamFilter}
+        ownerFilter={ownerFilter}
+        setOwnerFilter={setOwnerFilter}
+        statusFilter={statusFilter}
+        setStatusFilter={setStatusFilter}
+        teams={teams}
+        members={members}
+      />
 
       {creating && effectiveCycleId && (
         <CreateObjectiveDialog
@@ -88,57 +173,143 @@ export function ObjectivesPage({ currentUserId }: { currentUserId: string }) {
         />
       )}
 
-      <div className="border border-zinc-200 dark:border-zinc-800 rounded-lg overflow-hidden bg-white dark:bg-zinc-950 divide-y divide-zinc-200 dark:divide-zinc-800">
-        {isLoading ? (
-          <p className="px-4 py-6 text-sm text-zinc-500">Loading…</p>
-        ) : objectives.length === 0 ? (
-          <p className="px-4 py-6 text-sm text-zinc-500">
-            No objectives in this cycle yet.
-          </p>
-        ) : (
-          objectives.map((o) => (
-            <Link
-              key={o.id}
-              href={`/objectives/${o.id}`}
-              className="block px-4 py-3 hover:bg-zinc-50 dark:hover:bg-zinc-900"
-            >
-              <div className="flex items-center justify-between gap-4">
-                <div className="min-w-0">
-                  <p className="font-medium truncate">{o.title}</p>
-                  {o.description && (
-                    <p className="text-xs text-zinc-500 truncate">
-                      {o.description}
-                    </p>
-                  )}
-                </div>
-                <div className="flex items-center gap-3 shrink-0">
-                  <ProgressPill value={Number(o.progress)} />
-                  <span className="text-xs text-zinc-500 capitalize">
-                    {o.status}
-                  </span>
-                </div>
-              </div>
-            </Link>
-          ))
-        )}
-      </div>
+      {isLoading ? (
+        <p className="text-sm text-zinc-500">Loading…</p>
+      ) : view === "tree" ? (
+        <OkrTree
+          objectives={visibleForTree}
+          cycle={cycle}
+          onSelect={(o) => setPanelId(o.id)}
+        />
+      ) : (
+        <ListView
+          objectives={filtered}
+          cycle={cycle}
+          onSelect={(o) => setPanelId(o.id)}
+        />
+      )}
+
+      <ObjectivePanel
+        objectiveId={panelId}
+        onClose={() => setPanelId(null)}
+      />
     </section>
   );
 }
 
-function ProgressPill({ value }: { value: number }) {
-  const pct = Math.round(value);
+function ListView({
+  objectives,
+  cycle,
+  onSelect,
+}: {
+  objectives: Objective[];
+  cycle: { startDate: string; endDate: string } | null;
+  onSelect: (o: Objective) => void;
+}) {
+  if (objectives.length === 0) {
+    return (
+      <p className="text-sm text-zinc-500 px-4 py-6 border border-zinc-200 dark:border-zinc-800 rounded-lg">
+        Nothing matches the current filters.
+      </p>
+    );
+  }
   return (
-    <div className="flex items-center gap-2 min-w-[120px]">
-      <div className="h-1.5 w-20 rounded-full bg-zinc-100 dark:bg-zinc-800 overflow-hidden">
-        <div
-          className="h-full bg-emerald-500 transition-all"
-          style={{ width: `${pct}%` }}
-        />
-      </div>
-      <span className="text-xs tabular-nums text-zinc-600 dark:text-zinc-400">
-        {pct}%
-      </span>
+    <div className="border border-zinc-200 dark:border-zinc-800 rounded-lg bg-white dark:bg-zinc-950 divide-y divide-zinc-200 dark:divide-zinc-800">
+      {objectives.map((o) => {
+        const paceStatus: Pace | "no_data" = cycle
+          ? pace({
+              actualProgress: Number(o.progress),
+              cycleStart: new Date(cycle.startDate),
+              cycleEnd: new Date(cycle.endDate),
+            }).status
+          : "no_data";
+        return (
+          <button
+            key={o.id}
+            type="button"
+            onClick={() => onSelect(o)}
+            className="w-full text-left px-4 py-3 hover:bg-zinc-50 dark:hover:bg-zinc-900 flex items-center gap-3"
+          >
+            <LevelIcon objective={o} />
+            <div className="flex-1 min-w-0">
+              <p className="font-medium truncate">{o.title}</p>
+            </div>
+            <div className="flex items-center gap-4 shrink-0">
+              <PaceDot status={paceStatus} />
+              <ProgressBar value={Number(o.progress)} />
+            </div>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+function FilterBar({
+  search,
+  setSearch,
+  teamFilter,
+  setTeamFilter,
+  ownerFilter,
+  setOwnerFilter,
+  statusFilter,
+  setStatusFilter,
+  teams,
+  members,
+}: {
+  search: string;
+  setSearch: (s: string) => void;
+  teamFilter: string;
+  setTeamFilter: (s: string) => void;
+  ownerFilter: string;
+  setOwnerFilter: (s: string) => void;
+  statusFilter: string;
+  setStatusFilter: (s: string) => void;
+  teams: { id: string; name: string }[];
+  members: { id: string; name: string }[];
+}) {
+  return (
+    <div className="flex items-center gap-2 flex-wrap text-sm">
+      <input
+        placeholder="Search title…"
+        value={search}
+        onChange={(e) => setSearch(e.target.value)}
+        className="rounded-md border border-zinc-200 dark:border-zinc-700 bg-transparent px-2 py-1.5 text-sm min-w-40"
+      />
+      <select
+        value={teamFilter}
+        onChange={(e) => setTeamFilter(e.target.value)}
+        className="rounded-md border border-zinc-200 dark:border-zinc-700 bg-transparent px-2 py-1.5"
+      >
+        <option value="">All teams</option>
+        {teams.map((t) => (
+          <option key={t.id} value={t.id}>
+            {t.name}
+          </option>
+        ))}
+      </select>
+      <select
+        value={ownerFilter}
+        onChange={(e) => setOwnerFilter(e.target.value)}
+        className="rounded-md border border-zinc-200 dark:border-zinc-700 bg-transparent px-2 py-1.5"
+      >
+        <option value="">All owners</option>
+        {members.map((m) => (
+          <option key={m.id} value={m.id}>
+            {m.name}
+          </option>
+        ))}
+      </select>
+      <select
+        value={statusFilter}
+        onChange={(e) => setStatusFilter(e.target.value)}
+        className="rounded-md border border-zinc-200 dark:border-zinc-700 bg-transparent px-2 py-1.5"
+      >
+        <option value="">All statuses</option>
+        <option value="draft">Draft</option>
+        <option value="active">Active</option>
+        <option value="closed">Closed</option>
+      </select>
     </div>
   );
 }
@@ -207,7 +378,6 @@ function CreateObjectiveDialog({
             value={title}
             onChange={(e) => setTitle(e.target.value)}
             className="w-full rounded-md border border-zinc-200 dark:border-zinc-700 bg-transparent px-3 py-2 text-sm"
-            placeholder="e.g. Double activation rate"
           />
         </label>
         <label className="block text-sm space-y-1">
