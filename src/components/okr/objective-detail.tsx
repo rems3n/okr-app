@@ -4,6 +4,10 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
+import {
+  MetricBindingField,
+  type BindingDraft,
+} from "@/components/okr/metric-binding-field";
 import { useCheckInsForObjective } from "@/hooks/use-check-ins";
 import { useObjective } from "@/hooks/use-objectives";
 import { apiSend, ApiRequestError } from "@/lib/api/client";
@@ -148,6 +152,7 @@ export function ObjectiveDetailPage({
                 kr={kr}
                 canEdit={canEdit || kr.ownerUserId === currentUserId}
                 onChange={mutate}
+                binding={detail.bindingsByKr?.[kr.id] ?? null}
               />
             ))
           )}
@@ -284,10 +289,12 @@ function KrCard({
   kr,
   canEdit,
   onChange,
+  binding,
 }: {
   kr: KeyResult;
   canEdit: boolean;
   onChange: () => void;
+  binding: { provider: string; metricLabel: string } | null;
 }) {
   const [editing, setEditing] = useState(false);
   const pct = Math.round(krProgress(kr));
@@ -306,7 +313,17 @@ function KrCard({
     <div className="border border-zinc-200 dark:border-zinc-800 rounded-lg p-4 bg-white dark:bg-zinc-950">
       <div className="flex items-start justify-between gap-4">
         <div className="min-w-0">
-          <p className="font-medium">{kr.title}</p>
+          <div className="flex items-center gap-2 flex-wrap">
+            <p className="font-medium">{kr.title}</p>
+            {binding && (
+              <span
+                title={binding.metricLabel}
+                className="text-xs rounded-full bg-blue-100 dark:bg-blue-950 text-blue-800 dark:text-blue-300 px-2 py-0.5"
+              >
+                auto · {binding.provider}
+              </span>
+            )}
+          </div>
           <p className="text-xs text-zinc-500 mt-0.5">{formatValue(kr)}</p>
         </div>
         <div className="flex items-center gap-3 shrink-0">
@@ -369,6 +386,7 @@ function AddKrDialog({
   const [startValue, setStart] = useState("0");
   const [targetValue, setTarget] = useState("");
   const [unit, setUnit] = useState("");
+  const [binding, setBinding] = useState<BindingDraft | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -377,15 +395,27 @@ function AddKrDialog({
     setBusy(true);
     setError(null);
     try {
-      await apiSend("/api/v1/key-results", "POST", {
-        objectiveId,
-        title,
-        krType,
-        startValue: Number(startValue),
-        targetValue: Number(targetValue),
-        unit: unit || null,
-        ownerUserId: currentUserId,
-      });
+      const created = await apiSend<{ id: string }>(
+        "/api/v1/key-results",
+        "POST",
+        {
+          objectiveId,
+          title,
+          krType,
+          startValue: Number(startValue),
+          targetValue: Number(targetValue),
+          unit: unit || null,
+          ownerUserId: currentUserId,
+        },
+      );
+      if (binding) {
+        await apiSend("/api/v1/metrics/bindings", "POST", {
+          keyResultId: created.id,
+          integrationConnectedId: binding.integrationConnectedId,
+          metricDefinitionId: binding.metricDefinitionId,
+          config: binding.config,
+        });
+      }
       onCreated();
     } catch (err) {
       setError(err instanceof ApiRequestError ? err.message : "Failed");
@@ -468,6 +498,7 @@ function AddKrDialog({
             <input type="hidden" value="100" readOnly />
           )}
         </div>
+        <MetricBindingField value={binding} onChange={setBinding} />
         {error && <p className="text-sm text-red-500">{error}</p>}
         <div className="flex justify-end gap-2">
           <button

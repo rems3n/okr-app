@@ -22,7 +22,33 @@ export const GET = withAuth<undefined, { objectiveId: string }>({
     const parent = obj.parentObjectiveId
       ? await db.getObjectiveById(obj.parentObjectiveId)
       : null;
-    return { objective: obj, keyResults, children, parent };
+    // Per-KR binding info so the UI can render the source badge without an
+    // N+1 round-trip.
+    const bindings = await Promise.all(
+      keyResults.map((kr) => db.getBindingForKr(kr.id)),
+    );
+    const bindingsByKr = Object.fromEntries(
+      keyResults.map((kr, idx) => {
+        const b = bindings[idx];
+        return [
+          kr.id,
+          b
+            ? {
+                provider: b.integration.provider,
+                metricLabel: b.definition.label,
+                lastSyncedAt: b.integration.lastSyncedAt,
+              }
+            : null,
+        ];
+      }),
+    );
+    return {
+      objective: obj,
+      keyResults,
+      children,
+      parent,
+      bindingsByKr,
+    };
   },
 });
 

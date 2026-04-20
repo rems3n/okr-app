@@ -16,6 +16,10 @@ export type ObjectiveDetail = {
   keyResults: KeyResult[];
   children: Objective[];
   parent: Objective | null;
+  bindingsByKr: Record<
+    string,
+    { provider: string; metricLabel: string; lastSyncedAt: string | null } | null
+  >;
 };
 
 export function useObjective(objectiveId: string | null) {

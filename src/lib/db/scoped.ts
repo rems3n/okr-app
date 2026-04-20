@@ -4,9 +4,13 @@ import { db as defaultDb } from "./index";
 import {
   checkIns,
   cycles,
+  integrationsConnected,
   keyResultVersions,
   keyResults,
   managerAssignments,
+  metricBindings,
+  metricDefinitions,
+  metricValues,
   objectiveVersions,
   objectives,
   organizations,
@@ -16,6 +20,7 @@ import {
   type KeyResult,
   type NewCheckIn,
   type NewCycle,
+  type NewIntegrationConnected,
   type NewKeyResult,
   type NewObjective,
   type NewTeam,
@@ -762,6 +767,228 @@ export function scopedDb(organizationId: string, db: AnyDb = defaultDb) {
         await this.recomputeObjectiveProgress(updated.parentObjectiveId);
       }
       return updated ?? null;
+    },
+
+    // --- Integrations ---
+    async listConnectedIntegrations() {
+      return db
+        .select()
+        .from(integrationsConnected)
+        .where(eq(integrationsConnected.organizationId, organizationId));
+    },
+
+    async getIntegrationByProvider(provider: string) {
+      const [row] = await db
+        .select()
+        .from(integrationsConnected)
+        .where(
+          and(
+            eq(integrationsConnected.organizationId, organizationId),
+            eq(integrationsConnected.provider, provider),
+          ),
+        )
+        .limit(1);
+      return row ?? null;
+    },
+
+    async getIntegrationById(id: string) {
+      const [row] = await db
+        .select()
+        .from(integrationsConnected)
+        .where(
+          and(
+            eq(integrationsConnected.organizationId, organizationId),
+            eq(integrationsConnected.id, id),
+          ),
+        )
+        .limit(1);
+      return row ?? null;
+    },
+
+    async upsertIntegration(
+      input: Omit<NewIntegrationConnected, "organizationId">,
+    ) {
+      const [row] = await db
+        .insert(integrationsConnected)
+        .values({ ...input, organizationId })
+        .onConflictDoUpdate({
+          target: [
+            integrationsConnected.organizationId,
+            integrationsConnected.provider,
+          ],
+          set: {
+            nangoConnectionId: input.nangoConnectionId,
+            status: input.status ?? "active",
+            connectedByUserId: input.connectedByUserId,
+            errorMessage: null,
+          },
+        })
+        .returning();
+      return row;
+    },
+
+    async updateIntegrationStatus(
+      id: string,
+      patch: {
+        status?: "active" | "error" | "disconnected";
+        errorMessage?: string | null;
+        lastSyncedAt?: Date | null;
+      },
+    ) {
+      const [row] = await db
+        .update(integrationsConnected)
+        .set(patch)
+        .where(
+          and(
+            eq(integrationsConnected.organizationId, organizationId),
+            eq(integrationsConnected.id, id),
+          ),
+        )
+        .returning();
+      return row ?? null;
+    },
+
+    async disconnectIntegration(id: string) {
+      const [row] = await db
+        .update(integrationsConnected)
+        .set({ status: "disconnected" })
+        .where(
+          and(
+            eq(integrationsConnected.organizationId, organizationId),
+            eq(integrationsConnected.id, id),
+          ),
+        )
+        .returning();
+      return row ?? null;
+    },
+
+    // --- Metric bindings ---
+    async getBindingForKr(keyResultId: string) {
+      const kr = await this.getKeyResultById(keyResultId);
+      if (!kr) return null;
+      const [row] = await db
+        .select({
+          binding: metricBindings,
+          definition: metricDefinitions,
+          integration: integrationsConnected,
+        })
+        .from(metricBindings)
+        .innerJoin(
+          metricDefinitions,
+          eq(metricDefinitions.id, metricBindings.metricDefinitionId),
+        )
+        .innerJoin(
+          integrationsConnected,
+          eq(integrationsConnected.id, metricBindings.integrationConnectedId),
+        )
+        .where(eq(metricBindings.keyResultId, keyResultId))
+        .limit(1);
+      return row ?? null;
+    },
+
+    async listBindingsForIntegration(integrationConnectedId: string) {
+      return db
+        .select({
+          binding: metricBindings,
+          definition: metricDefinitions,
+        })
+        .from(metricBindings)
+        .innerJoin(
+          metricDefinitions,
+          eq(metricDefinitions.id, metricBindings.metricDefinitionId),
+        )
+        .innerJoin(
+          integrationsConnected,
+          eq(integrationsConnected.id, metricBindings.integrationConnectedId),
+        )
+        .where(
+          and(
+            eq(integrationsConnected.organizationId, organizationId),
+            eq(metricBindings.integrationConnectedId, integrationConnectedId),
+          ),
+        );
+    },
+
+    async createMetricBinding(input: {
+      keyResultId: string;
+      integrationConnectedId: string;
+      metricDefinitionId: string;
+      config: Record<string, unknown>;
+      createdByUserId: string;
+    }) {
+      // Ensure KR and integration both belong to this org.
+      const kr = await this.getKeyResultById(input.keyResultId);
+      const integration = await this.getIntegrationById(
+        input.integrationConnectedId,
+      );
+      if (!kr || !integration) return null;
+      const [row] = await db
+        .insert(metricBindings)
+        .values(input)
+        .returning();
+      return row;
+    },
+
+    async deleteMetricBinding(id: string) {
+      await db.delete(metricBindings).where(eq(metricBindings.id, id));
+    },
+
+    /**
+     * Persist a new metric value AND emit a sync-sourced check-in that
+     * carries the previous confidence forward. Recomputes objective progress.
+     * Called by the Inngest processor for each bound KR after a Nango sync.
+     */
+    async appendMetricValue(input: {
+      keyResultId: string;
+      value: number;
+      capturedAt?: Date;
+      authorUserId: string;
+    }) {
+      const kr = await this.getKeyResultById(input.keyResultId);
+      if (!kr) return null;
+      const previous = kr.currentValue;
+
+      // Pick up the last check-in's confidence (default on_track).
+      const lastCheckIns = await this.latestCheckInsFor([input.keyResultId]);
+      const carriedConfidence =
+        lastCheckIns[0]?.confidence ?? "on_track";
+
+      await db.transaction(async (tx) => {
+        await tx.insert(metricValues).values({
+          keyResultId: input.keyResultId,
+          value: input.value.toString(),
+          capturedAt: input.capturedAt ?? new Date(),
+        });
+        await tx.insert(checkIns).values({
+          keyResultId: input.keyResultId,
+          authorUserId: input.authorUserId,
+          previousValue: previous,
+          newValue: input.value.toString(),
+          confidence: carriedConfidence,
+          note: null,
+          source: "sync",
+        } satisfies NewCheckIn);
+        await tx
+          .update(keyResults)
+          .set({
+            currentValue: input.value.toString(),
+            updatedAt: new Date(),
+          })
+          .where(eq(keyResults.id, input.keyResultId));
+      });
+      await this.recomputeObjectiveProgress(kr.objectiveId);
+      return { previous, next: input.value };
+    },
+
+    async listMetricValues(keyResultId: string, limit = 100) {
+      const kr = await this.getKeyResultById(keyResultId);
+      if (!kr) return [];
+      return db
+        .select()
+        .from(metricValues)
+        .where(eq(metricValues.keyResultId, keyResultId))
+        .orderBy(desc(metricValues.capturedAt))
+        .limit(limit);
     },
   };
 }

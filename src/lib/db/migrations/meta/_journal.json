@@ -29,6 +29,13 @@
       "when": 1776709352462,
       "tag": "0003_mushy_abomination",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1776713678403,
+      "tag": "0004_clammy_patriot",
+      "breakpoints": true
     }
   ]
 }

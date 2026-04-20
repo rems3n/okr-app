@@ -5,6 +5,7 @@ import {
   date,
   index,
   integer,
+  jsonb,
   numeric,
   pgTable,
   text,
@@ -317,5 +318,97 @@ export type ObjectiveVersion = typeof objectiveVersions.$inferSelect;
 export type NewObjectiveVersion = typeof objectiveVersions.$inferInsert;
 export type KeyResultVersion = typeof keyResultVersions.$inferSelect;
 export type NewKeyResultVersion = typeof keyResultVersions.$inferInsert;
+export const integrationsConnected = pgTable(
+  "integrations_connected",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    provider: text("provider").notNull(),
+    nangoConnectionId: text("nango_connection_id").notNull(),
+    status: text("status", {
+      enum: ["active", "error", "disconnected"],
+    })
+      .notNull()
+      .default("active"),
+    connectedByUserId: uuid("connected_by_user_id")
+      .notNull()
+      .references(() => users.id),
+    lastSyncedAt: timestamp("last_synced_at", { withTimezone: true }),
+    errorMessage: text("error_message"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .default(sql`now()`),
+  },
+  (t) => [
+    uniqueIndex("uq_org_provider").on(t.organizationId, t.provider),
+    uniqueIndex("uq_nango_connection").on(t.nangoConnectionId),
+  ],
+);
+
+export const metricDefinitions = pgTable("metric_definitions", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  provider: text("provider").notNull(),
+  key: text("key").notNull().unique(),
+  label: text("label").notNull(),
+  description: text("description"),
+  configSchema: jsonb("config_schema").notNull(),
+  nangoSyncName: text("nango_sync_name").notNull(),
+  outputUnit: text("output_unit"),
+  enabled: boolean("enabled").notNull().default(false),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .default(sql`now()`),
+});
+
+export const metricBindings = pgTable(
+  "metric_bindings",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    keyResultId: uuid("key_result_id")
+      .notNull()
+      .references(() => keyResults.id, { onDelete: "cascade" }),
+    integrationConnectedId: uuid("integration_connected_id")
+      .notNull()
+      .references(() => integrationsConnected.id, { onDelete: "cascade" }),
+    metricDefinitionId: uuid("metric_definition_id")
+      .notNull()
+      .references(() => metricDefinitions.id),
+    config: jsonb("config").notNull(),
+    createdByUserId: uuid("created_by_user_id")
+      .notNull()
+      .references(() => users.id),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .default(sql`now()`),
+  },
+  (t) => [uniqueIndex("uq_binding_per_kr").on(t.keyResultId)],
+);
+
+export const metricValues = pgTable(
+  "metric_values",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    keyResultId: uuid("key_result_id")
+      .notNull()
+      .references(() => keyResults.id, { onDelete: "cascade" }),
+    value: numeric("value", { precision: 18, scale: 4 }).notNull(),
+    capturedAt: timestamp("captured_at", { withTimezone: true })
+      .notNull()
+      .default(sql`now()`),
+  },
+  (t) => [index("idx_metric_values_kr").on(t.keyResultId, t.capturedAt)],
+);
+
 export type CheckIn = typeof checkIns.$inferSelect;
 export type NewCheckIn = typeof checkIns.$inferInsert;
+export type IntegrationConnected = typeof integrationsConnected.$inferSelect;
+export type NewIntegrationConnected =
+  typeof integrationsConnected.$inferInsert;
+export type MetricDefinition = typeof metricDefinitions.$inferSelect;
+export type NewMetricDefinition = typeof metricDefinitions.$inferInsert;
+export type MetricBinding = typeof metricBindings.$inferSelect;
+export type NewMetricBinding = typeof metricBindings.$inferInsert;
+export type MetricValue = typeof metricValues.$inferSelect;
+export type NewMetricValue = typeof metricValues.$inferInsert;
