@@ -1,8 +1,10 @@
 "use client";
 
+import { Sparkles } from "lucide-react";
 import Link from "next/link";
 import { useMemo, useState } from "react";
 
+import { DraftAssistant } from "@/components/ai/draft-assistant";
 import { OkrTree } from "@/components/okr/okr-tree";
 import { ObjectivePanel } from "@/components/okr/objective-panel";
 import {
@@ -39,6 +41,7 @@ export function ObjectivesPage({ currentUserId }: { currentUserId: string }) {
   const [statusFilter, setStatusFilter] = useState("");
   const [search, setSearch] = useState("");
   const [creating, setCreating] = useState(false);
+  const [draftOpen, setDraftOpen] = useState(false);
   const [panelId, setPanelId] = useState<string | null>(null);
 
   const cycle = cycles.find((c) => c.id === effectiveCycleId) ?? null;
@@ -136,13 +139,23 @@ export function ObjectivesPage({ currentUserId }: { currentUserId: string }) {
             </button>
           </div>
           {effectiveCycleId && (
-            <button
-              type="button"
-              onClick={() => setCreating(true)}
-              className="rounded-md bg-zinc-900 text-white px-3 py-1.5 text-sm dark:bg-zinc-50 dark:text-zinc-900"
-            >
-              New objective
-            </button>
+            <>
+              <button
+                type="button"
+                onClick={() => setDraftOpen(true)}
+                className="inline-flex items-center gap-1.5 rounded-md border border-violet-200 dark:border-violet-900 text-violet-700 dark:text-violet-300 px-3 py-1.5 text-sm hover:bg-violet-50 dark:hover:bg-violet-950"
+              >
+                <Sparkles className="h-3.5 w-3.5" />
+                Draft with AI
+              </button>
+              <button
+                type="button"
+                onClick={() => setCreating(true)}
+                className="rounded-md bg-zinc-900 text-white px-3 py-1.5 text-sm dark:bg-zinc-50 dark:text-zinc-900"
+              >
+                New objective
+              </button>
+            </>
           )}
         </div>
       </header>
@@ -193,6 +206,17 @@ export function ObjectivesPage({ currentUserId }: { currentUserId: string }) {
         objectiveId={panelId}
         onClose={() => setPanelId(null)}
       />
+
+      {draftOpen && effectiveCycleId && (
+        <DraftAssistant
+          cycleId={effectiveCycleId}
+          currentUserId={currentUserId}
+          onClose={() => setDraftOpen(false)}
+          onCreated={() => {
+            mutate();
+          }}
+        />
+      )}
     </section>
   );
 }

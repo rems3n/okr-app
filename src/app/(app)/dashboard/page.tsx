@@ -1,5 +1,6 @@
 import Link from "next/link";
 
+import { AiSummaryCard } from "@/components/ai/summary-card";
 import {
   LevelIcon,
   PaceDot,
@@ -101,6 +102,7 @@ export default async function DashboardPage() {
 
       {isAdmin ? (
         <>
+          <AiSummaryCard cycleId={currentCycle.id} />
           <ObjectivesPanel
             title="Company objectives"
             objectives={topLevel}
