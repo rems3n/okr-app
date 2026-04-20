@@ -244,6 +244,35 @@ export const objectiveVersions = pgTable(
   ],
 );
 
+export const checkIns = pgTable(
+  "check_ins",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    keyResultId: uuid("key_result_id")
+      .notNull()
+      .references(() => keyResults.id, { onDelete: "cascade" }),
+    authorUserId: uuid("author_user_id")
+      .notNull()
+      .references(() => users.id),
+    previousValue: numeric("previous_value", { precision: 18, scale: 4 })
+      .notNull(),
+    newValue: numeric("new_value", { precision: 18, scale: 4 }).notNull(),
+    confidence: text("confidence", {
+      enum: ["on_track", "at_risk", "off_track"],
+    }).notNull(),
+    note: text("note"),
+    source: text("source", { enum: ["manual", "sync"] })
+      .notNull()
+      .default("manual"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .default(sql`now()`),
+  },
+  (t) => [
+    index("idx_checkins_kr").on(t.keyResultId, t.createdAt),
+  ],
+);
+
 export const keyResultVersions = pgTable(
   "key_result_versions",
   {
@@ -288,3 +317,5 @@ export type ObjectiveVersion = typeof objectiveVersions.$inferSelect;
 export type NewObjectiveVersion = typeof objectiveVersions.$inferInsert;
 export type KeyResultVersion = typeof keyResultVersions.$inferSelect;
 export type NewKeyResultVersion = typeof keyResultVersions.$inferInsert;
+export type CheckIn = typeof checkIns.$inferSelect;
+export type NewCheckIn = typeof checkIns.$inferInsert;

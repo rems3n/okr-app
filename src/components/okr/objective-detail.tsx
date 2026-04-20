@@ -4,11 +4,13 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
+import { useCheckInsForObjective } from "@/hooks/use-check-ins";
 import { useObjective } from "@/hooks/use-objectives";
 import { apiSend, ApiRequestError } from "@/lib/api/client";
 import { can, type Role } from "@/lib/auth/permissions";
 import type { KeyResult } from "@/lib/db/schema";
 import { krProgress } from "@/lib/okr/progress";
+import { cn } from "@/lib/utils";
 
 type KrType = "number" | "percentage" | "currency" | "milestone";
 
@@ -172,6 +174,8 @@ export function ObjectiveDetailPage({
         </div>
       )}
 
+      <RecentCheckIns objectiveId={objective.id} />
+
       <details className="text-sm">
         <summary className="cursor-pointer text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-50">
           Version history
@@ -179,6 +183,69 @@ export function ObjectiveDetailPage({
         <VersionHistory objectiveId={objective.id} />
       </details>
     </section>
+  );
+}
+
+function RecentCheckIns({ objectiveId }: { objectiveId: string }) {
+  const { checkIns, isLoading } = useCheckInsForObjective(objectiveId);
+  if (isLoading) return null;
+  if (checkIns.length === 0) return null;
+  return (
+    <div>
+      <h2 className="text-lg font-semibold mb-3">Recent check-ins</h2>
+      <ol className="space-y-2">
+        {checkIns.slice(0, 10).map((ci) => (
+          <li
+            key={ci.id}
+            className="rounded-md border border-zinc-200 dark:border-zinc-800 px-3 py-2 text-sm"
+          >
+            <div className="flex items-center justify-between gap-3">
+              <div className="min-w-0">
+                <p className="font-medium truncate">{ci.keyResultTitle}</p>
+                <p className="text-xs text-zinc-500">
+                  {ci.authorName} ·{" "}
+                  {new Date(ci.createdAt).toLocaleDateString()} ·{" "}
+                  {Number(ci.previousValue)} → {Number(ci.newValue)}
+                </p>
+              </div>
+              <ConfidenceBadge value={ci.confidence} />
+            </div>
+            {ci.note && (
+              <p className="mt-1 text-xs text-zinc-600 dark:text-zinc-400 whitespace-pre-wrap">
+                {ci.note}
+              </p>
+            )}
+          </li>
+        ))}
+      </ol>
+    </div>
+  );
+}
+
+export function ConfidenceBadge({
+  value,
+}: {
+  value: "on_track" | "at_risk" | "off_track";
+}) {
+  const map = {
+    on_track: {
+      label: "On track",
+      cls: "bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300",
+    },
+    at_risk: {
+      label: "At risk",
+      cls: "bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300",
+    },
+    off_track: {
+      label: "Off track",
+      cls: "bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-300",
+    },
+  } as const;
+  const { label, cls } = map[value];
+  return (
+    <span className={cn("text-xs rounded-full px-2 py-0.5", cls)}>
+      {label}
+    </span>
   );
 }
 

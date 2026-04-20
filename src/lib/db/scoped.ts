@@ -1,7 +1,8 @@
-import { and, asc, desc, eq, isNull } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNull } from "drizzle-orm";
 
 import { db as defaultDb } from "./index";
 import {
+  checkIns,
   cycles,
   keyResultVersions,
   keyResults,
@@ -13,6 +14,7 @@ import {
   teams,
   users,
   type KeyResult,
+  type NewCheckIn,
   type NewCycle,
   type NewKeyResult,
   type NewObjective,
@@ -564,6 +566,158 @@ export function scopedDb(organizationId: string, db: AnyDb = defaultDb) {
         .from(keyResultVersions)
         .where(eq(keyResultVersions.keyResultId, keyResultId))
         .orderBy(desc(keyResultVersions.versionNumber));
+    },
+
+    // --- Check-ins ---
+    async createCheckIn(input: {
+      keyResultId: string;
+      authorUserId: string;
+      newValue: number;
+      confidence: "on_track" | "at_risk" | "off_track";
+      note?: string | null;
+      source?: "manual" | "sync";
+    }) {
+      const kr = await this.getKeyResultById(input.keyResultId);
+      if (!kr) return null;
+      const previousValue = kr.currentValue;
+      return db.transaction(async (tx) => {
+        const [row] = await tx
+          .insert(checkIns)
+          .values({
+            keyResultId: input.keyResultId,
+            authorUserId: input.authorUserId,
+            previousValue,
+            newValue: input.newValue.toString(),
+            confidence: input.confidence,
+            note: input.note ?? null,
+            source: input.source ?? "manual",
+          } satisfies NewCheckIn)
+          .returning();
+        await tx
+          .update(keyResults)
+          .set({
+            currentValue: input.newValue.toString(),
+            updatedAt: new Date(),
+          })
+          .where(eq(keyResults.id, input.keyResultId));
+        return row;
+      });
+    },
+
+    async listCheckInsByKr(keyResultId: string, limit = 50) {
+      const kr = await this.getKeyResultById(keyResultId);
+      if (!kr) return [];
+      return db
+        .select()
+        .from(checkIns)
+        .where(eq(checkIns.keyResultId, keyResultId))
+        .orderBy(desc(checkIns.createdAt))
+        .limit(limit);
+    },
+
+    async listCheckInsByObjective(objectiveId: string, limit = 50) {
+      const obj = await this.getObjectiveById(objectiveId);
+      if (!obj) return [];
+      const krIds = (await this.listKeyResultsByObjective(objectiveId)).map(
+        (k) => k.id,
+      );
+      if (krIds.length === 0) return [];
+      return db
+        .select({
+          id: checkIns.id,
+          keyResultId: checkIns.keyResultId,
+          authorUserId: checkIns.authorUserId,
+          previousValue: checkIns.previousValue,
+          newValue: checkIns.newValue,
+          confidence: checkIns.confidence,
+          note: checkIns.note,
+          source: checkIns.source,
+          createdAt: checkIns.createdAt,
+          keyResultTitle: keyResults.title,
+          authorName: users.name,
+        })
+        .from(checkIns)
+        .innerJoin(keyResults, eq(keyResults.id, checkIns.keyResultId))
+        .innerJoin(users, eq(users.id, checkIns.authorUserId))
+        .where(inArray(checkIns.keyResultId, krIds))
+        .orderBy(desc(checkIns.createdAt))
+        .limit(limit);
+    },
+
+    /**
+     * Latest check-in per KR for a given list of KR ids. Used by the UI to
+     * render the confidence dot and "days since last update".
+     */
+    async latestCheckInsFor(keyResultIds: string[]) {
+      if (keyResultIds.length === 0) return [] as Array<{
+        keyResultId: string;
+        confidence: "on_track" | "at_risk" | "off_track";
+        createdAt: Date;
+      }>;
+      // Correlated subquery would be nicer; for this scale a grouped fetch
+      // and JS reduction is fine.
+      const rows = await db
+        .select({
+          keyResultId: checkIns.keyResultId,
+          confidence: checkIns.confidence,
+          createdAt: checkIns.createdAt,
+        })
+        .from(checkIns)
+        .where(inArray(checkIns.keyResultId, keyResultIds))
+        .orderBy(desc(checkIns.createdAt));
+      const latest = new Map<
+        string,
+        { keyResultId: string; confidence: "on_track" | "at_risk" | "off_track"; createdAt: Date }
+      >();
+      for (const r of rows) {
+        if (!latest.has(r.keyResultId)) latest.set(r.keyResultId, r);
+      }
+      return Array.from(latest.values());
+    },
+
+    /**
+     * KRs owned by `userId` that need a check-in — either never been checked
+     * in or stale beyond `staleAfterDays`. Used by the check-in flow and the
+     * dashboard's Needs Attention section.
+     */
+    async listKrsNeedingCheckIn(
+      userId: string,
+      cycleId: string,
+      staleAfterDays = 7,
+    ) {
+      const threshold = new Date();
+      threshold.setDate(threshold.getDate() - staleAfterDays);
+      const rows = await db
+        .select({
+          kr: keyResults,
+          obj: objectives,
+        })
+        .from(keyResults)
+        .innerJoin(objectives, eq(objectives.id, keyResults.objectiveId))
+        .where(
+          and(
+            eq(objectives.organizationId, organizationId),
+            eq(objectives.cycleId, cycleId),
+            eq(keyResults.ownerUserId, userId),
+            isNull(keyResults.deletedAt),
+            isNull(objectives.deletedAt),
+          ),
+        );
+      if (rows.length === 0) return [];
+      const krIds = rows.map((r) => r.kr.id);
+      const latest = await this.latestCheckInsFor(krIds);
+      const latestById = new Map(latest.map((l) => [l.keyResultId, l]));
+      return rows
+        .filter((r) => {
+          const last = latestById.get(r.kr.id);
+          if (!last) return true;
+          return last.createdAt < threshold;
+        })
+        .map((r) => ({
+          ...r.kr,
+          objective: r.obj,
+          lastCheckInAt: latestById.get(r.kr.id)?.createdAt ?? null,
+        }));
     },
 
     /**

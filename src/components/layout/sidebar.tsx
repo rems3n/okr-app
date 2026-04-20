@@ -3,12 +3,13 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
+  CheckCircle,
+  CircleDot,
   Home,
   LayoutGrid,
-  Users,
   Plug,
   Settings,
-  CircleDot,
+  Users,
 } from "lucide-react";
 
 import { cn } from "@/lib/utils";
@@ -17,6 +18,7 @@ const nav = [
   { href: "/dashboard", label: "Dashboard", icon: Home },
   { href: "/objectives", label: "OKR Tree", icon: LayoutGrid },
   { href: "/my-okrs", label: "My OKRs", icon: CircleDot },
+  { href: "/check-in", label: "Check-in", icon: CheckCircle },
   { href: "/teams", label: "Teams", icon: Users },
   { href: "/settings/integrations", label: "Integrations", icon: Plug },
   { href: "/settings", label: "Settings", icon: Settings },

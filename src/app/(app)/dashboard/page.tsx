@@ -46,7 +46,10 @@ export default async function DashboardPage() {
   }
 
   const currentCycle = active ?? cycles[0];
-  const objectives = await db.listObjectives({ cycleId: currentCycle.id });
+  const [objectives, pendingKrs] = await Promise.all([
+    db.listObjectives({ cycleId: currentCycle.id }),
+    db.listKrsNeedingCheckIn(ctx.userId, currentCycle.id),
+  ]);
   const daysRemaining = daysBetween(new Date(), new Date(currentCycle.endDate));
   const avgProgress =
     objectives.length > 0
@@ -60,7 +63,6 @@ export default async function DashboardPage() {
     pace({ actualProgress: progress, cycleStart, cycleEnd }).status;
 
   const isAdmin = ctx.role === "owner" || ctx.role === "admin";
-
   const topLevel = objectives.filter((o) => !o.parentObjectiveId);
   const needsAttention = objectives
     .filter((o) => paceOf(Number(o.progress)) === "behind")
@@ -81,6 +83,21 @@ export default async function DashboardPage() {
           {Math.round(avgProgress)}%
         </p>
       </header>
+
+      {pendingKrs.length > 0 && (
+        <Link
+          href="/check-in"
+          className="block rounded-lg border border-amber-200 dark:border-amber-900 bg-amber-50 dark:bg-amber-950/40 px-4 py-3 hover:bg-amber-100 dark:hover:bg-amber-900/40"
+        >
+          <p className="text-sm font-medium text-amber-900 dark:text-amber-200">
+            {pendingKrs.length} KR{pendingKrs.length === 1 ? "" : "s"} need a
+            check-in
+          </p>
+          <p className="text-xs text-amber-800/80 dark:text-amber-300/80">
+            Click to run the weekly check-in flow →
+          </p>
+        </Link>
+      )}
 
       {isAdmin ? (
         <>
