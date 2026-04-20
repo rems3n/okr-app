@@ -9,6 +9,7 @@ const tabs = [
   { href: "/settings", label: "General" },
   { href: "/settings/members", label: "Members" },
   { href: "/settings/teams", label: "Teams" },
+  { href: "/settings/cycles", label: "Cycles" },
   { href: "/settings/profile", label: "Profile" },
 ];
 

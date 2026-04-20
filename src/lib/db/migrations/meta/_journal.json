@@ -15,6 +15,13 @@
       "when": 1776704357059,
       "tag": "0001_worried_joseph",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1776707649992,
+      "tag": "0002_tearful_zodiak",
+      "breakpoints": true
     }
   ]
 }
