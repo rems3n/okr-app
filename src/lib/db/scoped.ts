@@ -7,6 +7,7 @@ import {
   cycles,
   entityTags,
   integrationsConnected,
+  keyResultScores,
   keyResultVersions,
   keyResults,
   managerAssignments,
@@ -1193,6 +1194,118 @@ export function scopedDb(organizationId: string, db: AnyDb = defaultDb) {
         out[r.entityId].push({ id: r.id, name: r.name, color: r.color });
       }
       return out;
+    },
+
+    // --- Scoring (end-of-cycle) ---
+    async upsertScore(input: {
+      keyResultId: string;
+      score: number;
+      finalValue: number;
+      reflection: string;
+      scoredByUserId: string;
+    }) {
+      // Cross-org safety: confirm the KR is reachable from this org.
+      const kr = await this.getKeyResultById(input.keyResultId);
+      if (!kr) return null;
+      const [row] = await db
+        .insert(keyResultScores)
+        .values({
+          keyResultId: input.keyResultId,
+          score: input.score.toFixed(2),
+          finalValue: input.finalValue.toString(),
+          reflection: input.reflection,
+          scoredByUserId: input.scoredByUserId,
+        })
+        .onConflictDoUpdate({
+          target: keyResultScores.keyResultId,
+          set: {
+            score: input.score.toFixed(2),
+            finalValue: input.finalValue.toString(),
+            reflection: input.reflection,
+            scoredByUserId: input.scoredByUserId,
+            updatedAt: new Date(),
+          },
+        })
+        .returning();
+      return row;
+    },
+
+    async getScoreForKr(keyResultId: string) {
+      const kr = await this.getKeyResultById(keyResultId);
+      if (!kr) return null;
+      const [row] = await db
+        .select()
+        .from(keyResultScores)
+        .where(eq(keyResultScores.keyResultId, keyResultId))
+        .limit(1);
+      return row ?? null;
+    },
+
+    async listScoresForCycle(cycleId: string) {
+      const cycle = await this.getCycleById(cycleId);
+      if (!cycle) return [];
+      const rows = await db
+        .select({
+          score: keyResultScores,
+          krTitle: keyResults.title,
+          objectiveId: objectives.id,
+          objectiveTitle: objectives.title,
+        })
+        .from(keyResultScores)
+        .innerJoin(
+          keyResults,
+          eq(keyResults.id, keyResultScores.keyResultId),
+        )
+        .innerJoin(objectives, eq(objectives.id, keyResults.objectiveId))
+        .where(
+          and(
+            eq(objectives.organizationId, organizationId),
+            eq(objectives.cycleId, cycleId),
+          ),
+        );
+      return rows;
+    },
+
+    /**
+     * Coverage snapshot used for cycle-close gating. Returns the set of KR ids
+     * in the cycle and which of them already have a score row.
+     */
+    async scoreCoverageForCycle(cycleId: string) {
+      const cycle = await this.getCycleById(cycleId);
+      if (!cycle)
+        return { total: 0, scored: 0, unscoredKrIds: [] as string[] };
+      const krs = await db
+        .select({ id: keyResults.id })
+        .from(keyResults)
+        .innerJoin(objectives, eq(objectives.id, keyResults.objectiveId))
+        .where(
+          and(
+            eq(objectives.organizationId, organizationId),
+            eq(objectives.cycleId, cycleId),
+            isNull(keyResults.deletedAt),
+            isNull(objectives.deletedAt),
+          ),
+        );
+      if (krs.length === 0)
+        return { total: 0, scored: 0, unscoredKrIds: [] };
+      const scoredRows =
+        krs.length === 0
+          ? []
+          : await db
+              .select({ keyResultId: keyResultScores.keyResultId })
+              .from(keyResultScores)
+              .where(
+                inArray(
+                  keyResultScores.keyResultId,
+                  krs.map((k) => k.id),
+                ),
+              );
+      const scored = new Set(scoredRows.map((r) => r.keyResultId));
+      return {
+        total: krs.length,
+        scored: scored.size,
+        unscoredKrIds: krs.map((k) => k.id).filter((id) => !scored.has(id)),
+      };
     },
   };
 }

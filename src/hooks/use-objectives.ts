@@ -13,12 +13,17 @@ export function useObjectives(cycleId: string | null) {
 
 export type ObjectiveDetail = {
   objective: Objective;
+  cycleStatus: "planning" | "active" | "grading" | "closed" | null;
   keyResults: KeyResult[];
   children: Objective[];
   parent: Objective | null;
   bindingsByKr: Record<
     string,
     { provider: string; metricLabel: string; lastSyncedAt: string | null } | null
+  >;
+  scoresByKr: Record<
+    string,
+    { score: string; finalValue: string; reflection: string } | null
   >;
 };
 

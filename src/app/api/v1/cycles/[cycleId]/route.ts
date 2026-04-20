@@ -51,6 +51,14 @@ export const PATCH = withAuth<
           );
         }
       }
+      if (input.status === "closed") {
+        const coverage = await db.scoreCoverageForCycle(cycle.id);
+        if (coverage.unscoredKrIds.length > 0) {
+          throw new BadRequestError(
+            `Cannot close: ${coverage.unscoredKrIds.length} of ${coverage.total} KRs still need a score. Grade them or reopen to active.`,
+          );
+        }
+      }
     }
 
     if (

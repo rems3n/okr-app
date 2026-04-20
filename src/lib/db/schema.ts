@@ -466,6 +466,31 @@ export const entityTags = pgTable(
   ],
 );
 
+export const keyResultScores = pgTable(
+  "key_result_scores",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    keyResultId: uuid("key_result_id")
+      .notNull()
+      .references(() => keyResults.id, { onDelete: "cascade" }),
+    score: numeric("score", { precision: 3, scale: 2 }).notNull(),
+    finalValue: numeric("final_value", { precision: 18, scale: 4 }).notNull(),
+    reflection: text("reflection").notNull(),
+    scoredByUserId: uuid("scored_by_user_id")
+      .notNull()
+      .references(() => users.id),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .default(sql`now()`),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .default(sql`now()`),
+  },
+  (t) => [uniqueIndex("uq_score_per_kr").on(t.keyResultId)],
+);
+
+export type KeyResultScore = typeof keyResultScores.$inferSelect;
+export type NewKeyResultScore = typeof keyResultScores.$inferInsert;
 export type CheckIn = typeof checkIns.$inferSelect;
 export type NewCheckIn = typeof checkIns.$inferInsert;
 export type IntegrationConnected = typeof integrationsConnected.$inferSelect;

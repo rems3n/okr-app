@@ -42,12 +42,33 @@ export const GET = withAuth<undefined, { objectiveId: string }>({
         ];
       }),
     );
+    const scores = await Promise.all(
+      keyResults.map((kr) => db.getScoreForKr(kr.id)),
+    );
+    const scoresByKr = Object.fromEntries(
+      keyResults.map((kr, idx) => {
+        const s = scores[idx];
+        return [
+          kr.id,
+          s
+            ? {
+                score: s.score,
+                finalValue: s.finalValue,
+                reflection: s.reflection,
+              }
+            : null,
+        ];
+      }),
+    );
+    const cycle = await db.getCycleById(obj.cycleId);
     return {
       objective: obj,
+      cycleStatus: cycle?.status ?? null,
       keyResults,
       children,
       parent,
       bindingsByKr,
+      scoresByKr,
     };
   },
 });

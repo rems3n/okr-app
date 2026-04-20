@@ -9,6 +9,7 @@ import {
   MetricBindingField,
   type BindingDraft,
 } from "@/components/okr/metric-binding-field";
+import { ScoreDialog } from "@/components/okr/score-dialog";
 import { TagPicker } from "@/components/okr/tag-picker";
 import { useCheckInsForObjective } from "@/hooks/use-check-ins";
 import { useObjective } from "@/hooks/use-objectives";
@@ -155,6 +156,8 @@ export function ObjectiveDetailPage({
                 canEdit={canEdit || kr.ownerUserId === currentUserId}
                 onChange={mutate}
                 binding={detail.bindingsByKr?.[kr.id] ?? null}
+                score={detail.scoresByKr?.[kr.id] ?? null}
+                cycleStatus={detail.cycleStatus}
               />
             ))
           )}
@@ -300,14 +303,21 @@ function KrCard({
   canEdit,
   onChange,
   binding,
+  score,
+  cycleStatus,
 }: {
   kr: KeyResult;
   canEdit: boolean;
   onChange: () => void;
   binding: { provider: string; metricLabel: string } | null;
+  score: { score: string; finalValue: string; reflection: string } | null;
+  cycleStatus: "planning" | "active" | "grading" | "closed" | null;
 }) {
   const [editing, setEditing] = useState(false);
+  const [scoring, setScoring] = useState(false);
   const pct = Math.round(krProgress(kr));
+  const gradingOpen =
+    cycleStatus === "grading" || cycleStatus === "closed";
 
   const del = async () => {
     if (!confirm("Delete this KR?")) return;
@@ -366,12 +376,60 @@ function KrCard({
           )}
         </div>
       </div>
+      {(gradingOpen || score) && (
+        <div className="mt-3 pt-3 border-t border-zinc-200 dark:border-zinc-800 flex items-start justify-between gap-3">
+          {score ? (
+            <div className="flex-1 min-w-0">
+              <p className="text-xs">
+                <span className="font-medium">
+                  Scored {Number(score.score).toFixed(2)}
+                </span>
+                <span className="text-zinc-500 ml-2">
+                  final {Number(score.finalValue)}
+                </span>
+              </p>
+              {score.reflection && (
+                <p className="text-xs text-zinc-500 mt-1 italic line-clamp-2">
+                  “{score.reflection}”
+                </p>
+              )}
+            </div>
+          ) : (
+            <p className="text-xs text-amber-700 dark:text-amber-400">
+              Not yet scored — cycle is in grading.
+            </p>
+          )}
+          {canEdit && gradingOpen && (
+            <button
+              type="button"
+              onClick={() => setScoring(true)}
+              className="text-xs rounded-md bg-zinc-900 text-white px-2 py-1 dark:bg-zinc-50 dark:text-zinc-900 shrink-0"
+            >
+              {score ? "Update score" : "Score"}
+            </button>
+          )}
+        </div>
+      )}
       {editing && (
         <EditKrDialog
           kr={kr}
           onClose={() => setEditing(false)}
           onSaved={() => {
             setEditing(false);
+            onChange();
+          }}
+        />
+      )}
+      {scoring && (
+        <ScoreDialog
+          keyResultId={kr.id}
+          krTitle={kr.title}
+          currentValue={kr.currentValue}
+          targetValue={kr.targetValue}
+          existing={score}
+          onClose={() => setScoring(false)}
+          onSaved={() => {
+            setScoring(false);
             onChange();
           }}
         />
