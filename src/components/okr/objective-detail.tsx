@@ -4,10 +4,12 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
+import { CommentThread } from "@/components/collaboration/comment-thread";
 import {
   MetricBindingField,
   type BindingDraft,
 } from "@/components/okr/metric-binding-field";
+import { TagPicker } from "@/components/okr/tag-picker";
 import { useCheckInsForObjective } from "@/hooks/use-check-ins";
 import { useObjective } from "@/hooks/use-objectives";
 import { apiSend, ApiRequestError } from "@/lib/api/client";
@@ -179,7 +181,15 @@ export function ObjectiveDetailPage({
         </div>
       )}
 
+      <TagPicker entityType="objective" entityId={objective.id} />
+
       <RecentCheckIns objectiveId={objective.id} />
+
+      <CommentThread
+        entityType="objective"
+        entityId={objective.id}
+        currentUserId={currentUserId}
+      />
 
       <details className="text-sm">
         <summary className="cursor-pointer text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-50">

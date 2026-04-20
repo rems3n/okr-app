@@ -22,31 +22,31 @@ export const PROVIDERS: ProviderDef[] = [
     key: "slack",
     label: "Slack",
     description: "Track activity in the channels that matter.",
-    enabled: false,
+    enabled: true,
   },
   {
     key: "jira",
     label: "Jira",
     description: "Issue throughput and sprint completion.",
-    enabled: false,
+    enabled: true,
   },
   {
     key: "quickbooks",
     label: "QuickBooks",
     description: "Revenue, expenses, cash position straight from QBO.",
-    enabled: false,
+    enabled: true,
   },
   {
     key: "shopify",
     label: "Shopify",
     description: "Orders, revenue, and new customers from your store.",
-    enabled: false,
+    enabled: true,
   },
   {
     key: "zoho-bigin",
     label: "Zoho Bigin",
     description: "Deal pipeline + win rate from your Bigin CRM.",
-    enabled: false,
+    enabled: true,
   },
 ];
 

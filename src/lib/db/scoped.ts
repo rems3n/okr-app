@@ -3,7 +3,9 @@ import { and, asc, desc, eq, inArray, isNull } from "drizzle-orm";
 import { db as defaultDb } from "./index";
 import {
   checkIns,
+  comments,
   cycles,
+  entityTags,
   integrationsConnected,
   keyResultVersions,
   keyResults,
@@ -14,15 +16,18 @@ import {
   objectiveVersions,
   objectives,
   organizations,
+  tags,
   teamMemberships,
   teams,
   users,
   type KeyResult,
   type NewCheckIn,
+  type NewComment,
   type NewCycle,
   type NewIntegrationConnected,
   type NewKeyResult,
   type NewObjective,
+  type NewTag,
   type NewTeam,
   type NewUser,
   type Objective,
@@ -989,6 +994,205 @@ export function scopedDb(organizationId: string, db: AnyDb = defaultDb) {
         .where(eq(metricValues.keyResultId, keyResultId))
         .orderBy(desc(metricValues.capturedAt))
         .limit(limit);
+    },
+
+    // --- Comments ---
+    async listComments(
+      entityType: "objective" | "key_result" | "check_in",
+      entityId: string,
+    ) {
+      return db
+        .select({
+          id: comments.id,
+          entityType: comments.entityType,
+          entityId: comments.entityId,
+          authorUserId: comments.authorUserId,
+          body: comments.body,
+          mentionedUserIds: comments.mentionedUserIds,
+          createdAt: comments.createdAt,
+          updatedAt: comments.updatedAt,
+          authorName: users.name,
+          authorAvatarUrl: users.avatarUrl,
+        })
+        .from(comments)
+        .innerJoin(users, eq(users.id, comments.authorUserId))
+        .where(
+          and(
+            eq(comments.organizationId, organizationId),
+            eq(comments.entityType, entityType),
+            eq(comments.entityId, entityId),
+          ),
+        )
+        .orderBy(asc(comments.createdAt));
+    },
+
+    async createComment(
+      input: Omit<NewComment, "organizationId">,
+    ) {
+      const [row] = await db
+        .insert(comments)
+        .values({ ...input, organizationId })
+        .returning();
+      return row;
+    },
+
+    async updateComment(
+      commentId: string,
+      authorUserId: string,
+      body: string,
+      mentionedUserIds: string[],
+    ) {
+      const [row] = await db
+        .update(comments)
+        .set({
+          body,
+          mentionedUserIds,
+          updatedAt: new Date(),
+        })
+        .where(
+          and(
+            eq(comments.organizationId, organizationId),
+            eq(comments.id, commentId),
+            eq(comments.authorUserId, authorUserId),
+          ),
+        )
+        .returning();
+      return row ?? null;
+    },
+
+    async deleteComment(commentId: string, authorUserId: string) {
+      const [row] = await db
+        .delete(comments)
+        .where(
+          and(
+            eq(comments.organizationId, organizationId),
+            eq(comments.id, commentId),
+            eq(comments.authorUserId, authorUserId),
+          ),
+        )
+        .returning();
+      return row ?? null;
+    },
+
+    // --- Tags ---
+    async listTags() {
+      return db
+        .select()
+        .from(tags)
+        .where(eq(tags.organizationId, organizationId))
+        .orderBy(asc(tags.name));
+    },
+
+    async createTag(input: Omit<NewTag, "organizationId">) {
+      const [row] = await db
+        .insert(tags)
+        .values({ ...input, organizationId })
+        .returning();
+      return row;
+    },
+
+    async deleteTag(tagId: string) {
+      await db
+        .delete(tags)
+        .where(
+          and(eq(tags.organizationId, organizationId), eq(tags.id, tagId)),
+        );
+    },
+
+    async listTagsForEntity(
+      entityType: "objective" | "key_result",
+      entityId: string,
+    ) {
+      return db
+        .select({
+          id: tags.id,
+          name: tags.name,
+          color: tags.color,
+        })
+        .from(entityTags)
+        .innerJoin(tags, eq(tags.id, entityTags.tagId))
+        .where(
+          and(
+            eq(tags.organizationId, organizationId),
+            eq(entityTags.entityType, entityType),
+            eq(entityTags.entityId, entityId),
+          ),
+        );
+    },
+
+    async applyTag(
+      tagId: string,
+      entityType: "objective" | "key_result",
+      entityId: string,
+    ) {
+      // Confirm tag belongs to this org.
+      const [tag] = await db
+        .select()
+        .from(tags)
+        .where(
+          and(eq(tags.organizationId, organizationId), eq(tags.id, tagId)),
+        )
+        .limit(1);
+      if (!tag) return null;
+      const [row] = await db
+        .insert(entityTags)
+        .values({ tagId, entityType, entityId })
+        .onConflictDoNothing()
+        .returning();
+      return row ?? null;
+    },
+
+    async removeTag(
+      tagId: string,
+      entityType: "objective" | "key_result",
+      entityId: string,
+    ) {
+      await db
+        .delete(entityTags)
+        .where(
+          and(
+            eq(entityTags.tagId, tagId),
+            eq(entityTags.entityType, entityType),
+            eq(entityTags.entityId, entityId),
+          ),
+        );
+    },
+
+    /**
+     * Bulk fetch of tag lists keyed by entity id — used by the tree/list view
+     * to render tag chips without a per-row round trip.
+     */
+    async listTagsForEntities(
+      entityType: "objective" | "key_result",
+      entityIds: string[],
+    ) {
+      if (entityIds.length === 0)
+        return {} as Record<string, { id: string; name: string; color: string }[]>;
+      const rows = await db
+        .select({
+          entityId: entityTags.entityId,
+          id: tags.id,
+          name: tags.name,
+          color: tags.color,
+        })
+        .from(entityTags)
+        .innerJoin(tags, eq(tags.id, entityTags.tagId))
+        .where(
+          and(
+            eq(tags.organizationId, organizationId),
+            eq(entityTags.entityType, entityType),
+            inArray(entityTags.entityId, entityIds),
+          ),
+        );
+      const out: Record<
+        string,
+        { id: string; name: string; color: string }[]
+      > = {};
+      for (const r of rows) {
+        if (!out[r.entityId]) out[r.entityId] = [];
+        out[r.entityId].push({ id: r.id, name: r.name, color: r.color });
+      }
+      return out;
     },
   };
 }

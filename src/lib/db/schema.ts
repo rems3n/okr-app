@@ -401,6 +401,71 @@ export const metricValues = pgTable(
   (t) => [index("idx_metric_values_kr").on(t.keyResultId, t.capturedAt)],
 );
 
+export const comments = pgTable(
+  "comments",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    entityType: text("entity_type", {
+      enum: ["objective", "key_result", "check_in"],
+    }).notNull(),
+    entityId: uuid("entity_id").notNull(),
+    authorUserId: uuid("author_user_id")
+      .notNull()
+      .references(() => users.id),
+    body: text("body").notNull(),
+    mentionedUserIds: jsonb("mentioned_user_ids")
+      .$type<string[]>()
+      .notNull()
+      .default(sql`'[]'::jsonb`),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .default(sql`now()`),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .default(sql`now()`),
+  },
+  (t) => [
+    index("idx_comments_entity").on(t.entityType, t.entityId, t.createdAt),
+  ],
+);
+
+export const tags = pgTable(
+  "tags",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    color: text("color").notNull().default("#6B7280"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .default(sql`now()`),
+  },
+  (t) => [uniqueIndex("uq_tag_org_name").on(t.organizationId, t.name)],
+);
+
+export const entityTags = pgTable(
+  "entity_tags",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tagId: uuid("tag_id")
+      .notNull()
+      .references(() => tags.id, { onDelete: "cascade" }),
+    entityType: text("entity_type", {
+      enum: ["objective", "key_result"],
+    }).notNull(),
+    entityId: uuid("entity_id").notNull(),
+  },
+  (t) => [
+    uniqueIndex("uq_tag_entity").on(t.tagId, t.entityType, t.entityId),
+    index("idx_entity_tags_entity").on(t.entityType, t.entityId),
+  ],
+);
+
 export type CheckIn = typeof checkIns.$inferSelect;
 export type NewCheckIn = typeof checkIns.$inferInsert;
 export type IntegrationConnected = typeof integrationsConnected.$inferSelect;
@@ -412,3 +477,9 @@ export type MetricBinding = typeof metricBindings.$inferSelect;
 export type NewMetricBinding = typeof metricBindings.$inferInsert;
 export type MetricValue = typeof metricValues.$inferSelect;
 export type NewMetricValue = typeof metricValues.$inferInsert;
+export type Comment = typeof comments.$inferSelect;
+export type NewComment = typeof comments.$inferInsert;
+export type Tag = typeof tags.$inferSelect;
+export type NewTag = typeof tags.$inferInsert;
+export type EntityTag = typeof entityTags.$inferSelect;
+export type NewEntityTag = typeof entityTags.$inferInsert;

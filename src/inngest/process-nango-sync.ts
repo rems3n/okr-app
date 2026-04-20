@@ -69,9 +69,134 @@ function computeValue(
         ? Math.round(progress * 100) / 100
         : null;
     }
+
+    case "slack.messages_in_channel": {
+      const channelId = String(config.channelId ?? "");
+      return records.filter(
+        (r) =>
+          !channelId ||
+          String(
+            (r as { channel?: string; channelId?: string }).channel ??
+              (r as { channelId?: string }).channelId ??
+              "",
+          ) === channelId,
+      ).length;
+    }
+
+    case "jira.issues_closed": {
+      const projectKey = String(config.projectKey ?? "").toUpperCase();
+      const issueType = config.issueType
+        ? String(config.issueType).toLowerCase()
+        : null;
+      return records.filter((r) => {
+        const key = String((r as { key?: string }).key ?? "");
+        if (projectKey && !key.toUpperCase().startsWith(`${projectKey}-`))
+          return false;
+        const status = String(
+          (r as { status?: { name?: string } }).status?.name ??
+            (r as { statusName?: string }).statusName ??
+            "",
+        ).toLowerCase();
+        if (status !== "done" && status !== "closed" && status !== "resolved")
+          return false;
+        if (issueType) {
+          const type = String(
+            (r as { issuetype?: { name?: string } }).issuetype?.name ??
+              (r as { issueType?: string }).issueType ??
+              "",
+          ).toLowerCase();
+          if (type !== issueType) return false;
+        }
+        return true;
+      }).length;
+    }
+
+    case "quickbooks.revenue":
+      return sumField(records, ["totalAmt", "amount", "revenue"]);
+
+    case "quickbooks.cash_balance":
+      // Use the most recent balance record rather than summing.
+      return latestField(records, ["balance", "amount"]);
+
+    case "shopify.orders":
+      return records.length;
+
+    case "shopify.revenue":
+      return sumField(records, ["totalPrice", "total_price", "amount"]);
+
+    case "zoho-bigin.deals_won": {
+      const pipelineName = config.pipelineName
+        ? String(config.pipelineName).toLowerCase()
+        : null;
+      return records.filter((r) => {
+        const stage = String(
+          (r as { stage?: string; Stage?: string }).stage ??
+            (r as { Stage?: string }).Stage ??
+            "",
+        ).toLowerCase();
+        if (stage !== "closed won") return false;
+        if (pipelineName) {
+          const pipe = String(
+            (r as { pipeline?: string; Pipeline?: string }).pipeline ??
+              (r as { Pipeline?: string }).Pipeline ??
+              "",
+          ).toLowerCase();
+          if (pipe !== pipelineName) return false;
+        }
+        return true;
+      }).length;
+    }
+
+    case "zoho-bigin.pipeline_value": {
+      const pipelineName = config.pipelineName
+        ? String(config.pipelineName).toLowerCase()
+        : null;
+      const open = records.filter((r) => {
+        const stage = String(
+          (r as { stage?: string; Stage?: string }).stage ??
+            (r as { Stage?: string }).Stage ??
+            "",
+        ).toLowerCase();
+        if (stage === "closed won" || stage === "closed lost") return false;
+        if (pipelineName) {
+          const pipe = String(
+            (r as { pipeline?: string; Pipeline?: string }).pipeline ??
+              (r as { Pipeline?: string }).Pipeline ??
+              "",
+          ).toLowerCase();
+          if (pipe !== pipelineName) return false;
+        }
+        return true;
+      });
+      return sumField(open, ["amount", "Amount", "value"]);
+    }
+
     default:
       return null;
   }
+}
+
+function sumField(records: NangoRecord[], keys: string[]): number {
+  return records.reduce((sum, r) => {
+    for (const k of keys) {
+      const v = (r as Record<string, unknown>)[k];
+      if (typeof v === "number") return sum + v;
+      if (typeof v === "string" && !Number.isNaN(Number(v)))
+        return sum + Number(v);
+    }
+    return sum;
+  }, 0);
+}
+
+function latestField(records: NangoRecord[], keys: string[]): number | null {
+  if (records.length === 0) return null;
+  const latest = records[records.length - 1];
+  for (const k of keys) {
+    const v = (latest as Record<string, unknown>)[k];
+    if (typeof v === "number") return v;
+    if (typeof v === "string" && !Number.isNaN(Number(v))) return Number(v);
+  }
+  return null;
 }
 
 export const processNangoSync = inngest.createFunction(

@@ -62,7 +62,7 @@ const DEFS: NewMetricDefinition[] = [
     },
     nangoSyncName: "slack-channel-messages",
     outputUnit: "count",
-    enabled: false,
+    enabled: true,
   },
   {
     provider: "jira",
@@ -82,7 +82,7 @@ const DEFS: NewMetricDefinition[] = [
     },
     nangoSyncName: "jira-issues-closed",
     outputUnit: "count",
-    enabled: false,
+    enabled: true,
   },
   {
     provider: "quickbooks",
@@ -92,7 +92,7 @@ const DEFS: NewMetricDefinition[] = [
     configSchema: { type: "object", properties: {} },
     nangoSyncName: "quickbooks-revenue",
     outputUnit: "$",
-    enabled: false,
+    enabled: true,
   },
   {
     provider: "quickbooks",
@@ -102,7 +102,7 @@ const DEFS: NewMetricDefinition[] = [
     configSchema: { type: "object", properties: {} },
     nangoSyncName: "quickbooks-cash-balance",
     outputUnit: "$",
-    enabled: false,
+    enabled: true,
   },
   {
     provider: "shopify",
@@ -112,7 +112,7 @@ const DEFS: NewMetricDefinition[] = [
     configSchema: { type: "object", properties: {} },
     nangoSyncName: "shopify-orders",
     outputUnit: "count",
-    enabled: false,
+    enabled: true,
   },
   {
     provider: "shopify",
@@ -122,7 +122,7 @@ const DEFS: NewMetricDefinition[] = [
     configSchema: { type: "object", properties: {} },
     nangoSyncName: "shopify-revenue",
     outputUnit: "$",
-    enabled: false,
+    enabled: true,
   },
   {
     provider: "zoho-bigin",
@@ -140,7 +140,7 @@ const DEFS: NewMetricDefinition[] = [
     },
     nangoSyncName: "zoho-bigin-deals-won",
     outputUnit: "count",
-    enabled: false,
+    enabled: true,
   },
   {
     provider: "zoho-bigin",
@@ -158,7 +158,7 @@ const DEFS: NewMetricDefinition[] = [
     },
     nangoSyncName: "zoho-bigin-pipeline-value",
     outputUnit: "$",
-    enabled: false,
+    enabled: true,
   },
 ];
 
