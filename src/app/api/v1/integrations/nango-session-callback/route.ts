@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 import { withAuth } from "@/lib/api/with-auth";
+import { requireCapacity } from "@/lib/billing/gating";
 import { BadRequestError } from "@/lib/errors";
 import { getProvider } from "@/lib/integrations/catalog";
 
@@ -26,6 +27,7 @@ export const POST = withAuth<z.infer<typeof Input>>({
         `${provider.label} is not yet available — coming soon.`,
       );
     }
+    await requireCapacity(ctx.orgId, { kind: "integrations" });
     const row = await db.upsertIntegration({
       provider: provider.key,
       nangoConnectionId: input.connectionId,

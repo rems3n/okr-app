@@ -2,6 +2,7 @@ import { clerkClient } from "@clerk/nextjs/server";
 import { z } from "zod";
 
 import { withAuth } from "@/lib/api/with-auth";
+import { requireCapacity } from "@/lib/billing/gating";
 import { BadRequestError } from "@/lib/errors";
 
 const InviteInput = z.object({
@@ -13,6 +14,7 @@ export const POST = withAuth<z.infer<typeof InviteInput>>({
   require: "member.invite",
   input: InviteInput,
   handler: async ({ ctx, input }) => {
+    await requireCapacity(ctx.orgId, { kind: "users" });
     const client = await clerkClient();
     try {
       const invitation =

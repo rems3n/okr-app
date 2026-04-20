@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 import { withAuth } from "@/lib/api/with-auth";
+import { requireCapacity } from "@/lib/billing/gating";
 import { BadRequestError, NotFoundError } from "@/lib/errors";
 
 const ListQuery = z.object({
@@ -35,6 +36,7 @@ const CreateInput = z.object({
 export const POST = withAuth<z.infer<typeof CreateInput>>({
   input: CreateInput,
   handler: async ({ ctx, db, input }) => {
+    await requireCapacity(ctx.orgId, { kind: "objectives" });
     const cycle = await db.getCycleById(input.cycleId);
     if (!cycle) throw new NotFoundError("Cycle not found");
     if (cycle.status === "grading" || cycle.status === "closed") {

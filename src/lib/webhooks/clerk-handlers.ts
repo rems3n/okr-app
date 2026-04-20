@@ -32,12 +32,17 @@ function displayName(data: UserJSON): string {
 }
 
 async function upsertOrganization(data: OrganizationJSON): Promise<string> {
+  // New orgs land on the Free plan with a 14-day Starter trial window.
+  // effectivePlan() treats trialing orgs as Starter for limit checks.
+  const trialEndsAt = new Date();
+  trialEndsAt.setDate(trialEndsAt.getDate() + 14);
   const [row] = await db
     .insert(organizations)
     .values({
       clerkOrgId: data.id,
       name: data.name,
       slug: data.slug ?? data.id,
+      trialEndsAt,
     })
     .onConflictDoUpdate({
       target: organizations.clerkOrgId,
