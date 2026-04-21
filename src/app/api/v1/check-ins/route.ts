@@ -6,6 +6,7 @@ import {
   ForbiddenError,
   NotFoundError,
 } from "@/lib/errors";
+import { triggerWorkflow } from "@/lib/notifications/knock";
 
 const ListQuery = z.object({
   keyResultId: z.uuid().optional(),
@@ -44,15 +45,47 @@ export const POST = withAuth<z.infer<typeof CreateInput>>({
     if (cycle?.status === "closed") {
       throw new BadRequestError("Cannot check in on a closed cycle");
     }
-    const row = await db.createCheckIn({
+    const result = await db.createCheckIn({
       keyResultId: input.keyResultId,
       authorUserId: ctx.userId,
       newValue: input.newValue,
       confidence: input.confidence,
       note: input.note ?? null,
     });
-    if (!row) throw new NotFoundError();
+    if (!result) throw new NotFoundError();
     await db.recomputeObjectiveProgress(kr.objectiveId);
-    return row;
+
+    // Notify on confidence transition into at_risk/off_track. Recipients:
+    // KR owner's manager (if assigned) and org admins. Author is always
+    // excluded so people don't ping themselves.
+    const transitionedToRisk =
+      (input.confidence === "at_risk" || input.confidence === "off_track") &&
+      result.previousConfidence !== input.confidence;
+    if (transitionedToRisk) {
+      const manager = await db.getCurrentManager(kr.ownerUserId);
+      const admins = (await db.listUsers()).filter(
+        (u) => u.role !== "member" && u.id !== ctx.userId,
+      );
+      const recipients = [
+        ...new Set([
+          ...(manager?.managerUserId ? [manager.managerUserId] : []),
+          ...admins.map((u) => u.id),
+        ]),
+      ];
+      if (recipients.length > 0) {
+        await triggerWorkflow("kr-at-risk", recipients, {
+          krId: kr.id,
+          krTitle: kr.title,
+          objectiveId: kr.objectiveId,
+          objectiveTitle: kr.objective.title,
+          confidence: input.confidence,
+          previousConfidence: result.previousConfidence,
+          authorName: ctx.name,
+          note: input.note ?? "",
+        });
+      }
+    }
+
+    return result;
   },
 });

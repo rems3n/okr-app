@@ -51,7 +51,7 @@ export default async function AppLayout({
     <div className="flex flex-1 min-h-screen">
       <Sidebar />
       <div className="flex-1 flex flex-col">
-        <Header />
+        <Header userId={ctx.userId} />
         {showTrialBanner && (
           <div className="bg-amber-50 dark:bg-amber-950/40 border-b border-amber-200 dark:border-amber-900 px-4 py-2 text-xs flex items-center justify-between">
             <span className="text-amber-900 dark:text-amber-300">

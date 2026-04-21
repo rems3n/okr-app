@@ -591,8 +591,12 @@ export function scopedDb(organizationId: string, db: AnyDb = defaultDb) {
       const kr = await this.getKeyResultById(input.keyResultId);
       if (!kr) return null;
       const previousValue = kr.currentValue;
-      return db.transaction(async (tx) => {
-        const [row] = await tx
+      // Read the previous confidence so callers can detect transitions
+      // (e.g. fire a kr-at-risk notification when on_track → at_risk).
+      const prevLatest = await this.latestCheckInsFor([input.keyResultId]);
+      const previousConfidence = prevLatest[0]?.confidence ?? null;
+      const row = await db.transaction(async (tx) => {
+        const [inserted] = await tx
           .insert(checkIns)
           .values({
             keyResultId: input.keyResultId,
@@ -611,8 +615,9 @@ export function scopedDb(organizationId: string, db: AnyDb = defaultDb) {
             updatedAt: new Date(),
           })
           .where(eq(keyResults.id, input.keyResultId));
-        return row;
+        return inserted;
       });
+      return { ...row, previousConfidence, kr };
     },
 
     async listCheckInsByKr(keyResultId: string, limit = 50) {

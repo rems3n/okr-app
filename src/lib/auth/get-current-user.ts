@@ -4,6 +4,7 @@ import * as Sentry from "@sentry/nextjs";
 import { eq } from "drizzle-orm";
 
 import { db } from "@/lib/db";
+import { identifyKnockUser } from "@/lib/notifications/knock";
 import {
   organizations,
   users,
@@ -130,6 +131,15 @@ export const getAuthContext = cache(async (): Promise<AuthContext> => {
 
   Sentry.setUser({ id: user.id, email: user.email });
   Sentry.setTag("organization_id", org.id);
+
+  // Idempotent identify so notifications can be addressed to this user.
+  // No-op when KNOCK_API_KEY is missing.
+  await identifyKnockUser({
+    userId: user.id,
+    email: user.email,
+    name: user.name,
+    organizationId: org.id,
+  });
 
   return {
     userId: user.id,

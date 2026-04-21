@@ -1,8 +1,9 @@
 import { eq, isNull, lt, or } from "drizzle-orm";
 
 import { db } from "@/lib/db";
-import { integrationsConnected } from "@/lib/db/schema";
+import { integrationsConnected, users } from "@/lib/db/schema";
 import { inngest } from "@/lib/inngest/client";
+import { triggerWorkflow } from "@/lib/notifications/knock";
 
 /**
  * Daily at 08:00 UTC. Flags integrations whose last sync is older than
@@ -49,18 +50,31 @@ export const checkStaleIntegrations = inngest.createFunction(
         : created < newGrace;
       if (!shouldFlag) continue;
       await step.run(`flag-${row.id}`, async () => {
+        const errorMessage = lastSynced
+          ? `No sync in ${STALE_AFTER_HOURS}h+`
+          : `No sync since connection at ${created.toISOString()}`;
         await db
           .update(integrationsConnected)
-          .set({
-            status: "error",
-            errorMessage: lastSynced
-              ? `No sync in ${STALE_AFTER_HOURS}h+`
-              : `No sync since connection at ${created.toISOString()}`,
-          })
+          .set({ status: "error", errorMessage })
           .where(eq(integrationsConnected.id, row.id));
         logger.warn(
           `Flagged ${row.provider} integration ${row.id} as stale`,
         );
+        // Notify org admins so they can reconnect.
+        const admins = await db
+          .select()
+          .from(users)
+          .where(eq(users.organizationId, row.organizationId));
+        const adminIds = admins
+          .filter((u) => u.role === "admin" || u.role === "owner")
+          .map((u) => u.id);
+        if (adminIds.length > 0) {
+          await triggerWorkflow("integration-error", adminIds, {
+            provider: row.provider,
+            errorMessage,
+            integrationId: row.id,
+          });
+        }
       });
     }
 

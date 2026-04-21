@@ -2,6 +2,7 @@ import { z } from "zod";
 
 import { withAuth } from "@/lib/api/with-auth";
 import { BadRequestError, NotFoundError } from "@/lib/errors";
+import { triggerWorkflow } from "@/lib/notifications/knock";
 
 export const GET = withAuth<undefined, { cycleId: string }>({
   handler: async ({ db, params }) => {
@@ -71,6 +72,19 @@ export const PATCH = withAuth<
 
     const updated = await db.updateCycle(params.cycleId, input);
     if (!updated) throw new NotFoundError();
+
+    // Notify KR owners when grading opens so they can score promptly.
+    if (input.status === "grading" && cycle.status !== "grading") {
+      const krs = await db.listKrsForCycle(updated.id);
+      const owners = [...new Set(krs.map((r) => r.kr.ownerUserId))];
+      if (owners.length > 0) {
+        await triggerWorkflow("grading-open", owners, {
+          cycleId: updated.id,
+          cycleName: updated.name,
+        });
+      }
+    }
+
     return updated;
   },
 });
