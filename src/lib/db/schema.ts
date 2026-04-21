@@ -171,6 +171,11 @@ export const objectives = pgTable(
     progress: numeric("progress", { precision: 6, scale: 2 })
       .notNull()
       .default("0"),
+    // Leader override for the pace indicator. When null, the row uses the
+    // derived pace (progress vs. elapsed cycle time). Persists until cleared.
+    manualPaceStatus: text("manual_pace_status", {
+      enum: ["ahead", "on_pace", "behind"],
+    }),
     deletedAt: timestamp("deleted_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
@@ -210,6 +215,11 @@ export const keyResults = pgTable(
       .notNull()
       .default("0"),
     unit: text("unit"),
+    // 'auto'  → progress derived from (current - start) / (target - start)
+    // 'manual' → currentValue is the progress % directly (0-100), like milestone
+    progressMode: text("progress_mode", { enum: ["auto", "manual"] })
+      .notNull()
+      .default("auto"),
     sortOrder: integer("sort_order").notNull().default(0),
     deletedAt: timestamp("deleted_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true })

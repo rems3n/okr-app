@@ -459,10 +459,12 @@ function AddKrDialog({
   onCreated: () => void;
 }) {
   const [title, setTitle] = useState("");
+  const [progressMode, setProgressMode] = useState<"auto" | "manual">("auto");
   const [krType, setKrType] = useState<KrType>("number");
   const [startValue, setStart] = useState("0");
   const [targetValue, setTarget] = useState("");
   const [unit, setUnit] = useState("");
+  const [manualProgress, setManualProgress] = useState("0");
   const [binding, setBinding] = useState<BindingDraft | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -472,20 +474,38 @@ function AddKrDialog({
     setBusy(true);
     setError(null);
     try {
+      const basePayload =
+        progressMode === "manual"
+          ? {
+              // Server also treats progressMode='manual' + currentValue as %,
+              // with start=0/target=100. We send the shape explicitly so the
+              // KR starts in a consistent state without relying on a post-save
+              // normalization PATCH.
+              krType: "number" as const,
+              startValue: 0,
+              targetValue: 100,
+              currentValue: Number(manualProgress) || 0,
+              unit: "%",
+              progressMode: "manual" as const,
+            }
+          : {
+              krType,
+              startValue: Number(startValue),
+              targetValue: Number(targetValue),
+              unit: unit || null,
+              progressMode: "auto" as const,
+            };
       const created = await apiSend<{ id: string }>(
         "/api/v1/key-results",
         "POST",
         {
           objectiveId,
           title,
-          krType,
-          startValue: Number(startValue),
-          targetValue: Number(targetValue),
-          unit: unit || null,
           ownerUserId: currentUserId,
+          ...basePayload,
         },
       );
-      if (binding) {
+      if (binding && progressMode === "auto") {
         await apiSend("/api/v1/metrics/bindings", "POST", {
           keyResultId: created.id,
           integrationConnectedId: binding.integrationConnectedId,
@@ -521,61 +541,98 @@ function AddKrDialog({
             className="w-full rounded-md border border-zinc-200 dark:border-zinc-700 bg-transparent px-3 py-2 text-sm"
           />
         </label>
-        <div className="grid grid-cols-2 gap-3">
-          <label className="text-sm space-y-1">
-            <span className="text-zinc-700 dark:text-zinc-300">Type</span>
-            <select
-              value={krType}
-              onChange={(e) => setKrType(e.target.value as KrType)}
-              className="w-full rounded-md border border-zinc-200 dark:border-zinc-700 bg-transparent px-3 py-2 text-sm"
-            >
-              <option value="number">Number</option>
-              <option value="percentage">Percentage</option>
-              <option value="currency">Currency ($)</option>
-              <option value="milestone">Milestone (done/pending)</option>
-            </select>
-          </label>
-          <label className="text-sm space-y-1">
-            <span className="text-zinc-700 dark:text-zinc-300">Unit</span>
+        <label className="block text-sm space-y-1">
+          <span className="text-zinc-700 dark:text-zinc-300">
+            Track progress by
+          </span>
+          <select
+            value={progressMode}
+            onChange={(e) =>
+              setProgressMode(e.target.value as "auto" | "manual")
+            }
+            className="w-full rounded-md border border-zinc-200 dark:border-zinc-700 bg-transparent px-3 py-2 text-sm"
+          >
+            <option value="auto">Calculation (start → target)</option>
+            <option value="manual">Manual progress % (for fuzzy goals)</option>
+          </select>
+        </label>
+        {progressMode === "auto" ? (
+          <div className="grid grid-cols-2 gap-3">
+            <label className="text-sm space-y-1">
+              <span className="text-zinc-700 dark:text-zinc-300">Type</span>
+              <select
+                value={krType}
+                onChange={(e) => setKrType(e.target.value as KrType)}
+                className="w-full rounded-md border border-zinc-200 dark:border-zinc-700 bg-transparent px-3 py-2 text-sm"
+              >
+                <option value="number">Number</option>
+                <option value="percentage">Percentage</option>
+                <option value="currency">Currency ($)</option>
+                <option value="milestone">Milestone (done/pending)</option>
+              </select>
+            </label>
+            <label className="text-sm space-y-1">
+              <span className="text-zinc-700 dark:text-zinc-300">Unit</span>
+              <input
+                value={unit}
+                onChange={(e) => setUnit(e.target.value)}
+                placeholder={krType === "number" ? "e.g. users" : ""}
+                className="w-full rounded-md border border-zinc-200 dark:border-zinc-700 bg-transparent px-3 py-2 text-sm"
+                disabled={krType === "milestone"}
+              />
+            </label>
+            {krType !== "milestone" && (
+              <>
+                <label className="text-sm space-y-1">
+                  <span className="text-zinc-700 dark:text-zinc-300">Start</span>
+                  <input
+                    type="number"
+                    step="any"
+                    required
+                    value={startValue}
+                    onChange={(e) => setStart(e.target.value)}
+                    className="w-full rounded-md border border-zinc-200 dark:border-zinc-700 bg-transparent px-3 py-2 text-sm"
+                  />
+                </label>
+                <label className="text-sm space-y-1">
+                  <span className="text-zinc-700 dark:text-zinc-300">Target</span>
+                  <input
+                    type="number"
+                    step="any"
+                    required
+                    value={targetValue}
+                    onChange={(e) => setTarget(e.target.value)}
+                    className="w-full rounded-md border border-zinc-200 dark:border-zinc-700 bg-transparent px-3 py-2 text-sm"
+                  />
+                </label>
+              </>
+            )}
+            {krType === "milestone" && (
+              <input type="hidden" value="100" readOnly />
+            )}
+          </div>
+        ) : (
+          <label className="block text-sm space-y-1">
+            <span className="text-zinc-700 dark:text-zinc-300">
+              Initial progress (%)
+            </span>
             <input
-              value={unit}
-              onChange={(e) => setUnit(e.target.value)}
-              placeholder={krType === "number" ? "e.g. users" : ""}
+              type="number"
+              min={0}
+              max={100}
+              step={1}
+              value={manualProgress}
+              onChange={(e) => setManualProgress(e.target.value)}
               className="w-full rounded-md border border-zinc-200 dark:border-zinc-700 bg-transparent px-3 py-2 text-sm"
-              disabled={krType === "milestone"}
             />
+            <span className="text-xs text-zinc-500">
+              Use this for qualitative goals where start/target don&apos;t fit.
+            </span>
           </label>
-          {krType !== "milestone" && (
-            <>
-              <label className="text-sm space-y-1">
-                <span className="text-zinc-700 dark:text-zinc-300">Start</span>
-                <input
-                  type="number"
-                  step="any"
-                  required
-                  value={startValue}
-                  onChange={(e) => setStart(e.target.value)}
-                  className="w-full rounded-md border border-zinc-200 dark:border-zinc-700 bg-transparent px-3 py-2 text-sm"
-                />
-              </label>
-              <label className="text-sm space-y-1">
-                <span className="text-zinc-700 dark:text-zinc-300">Target</span>
-                <input
-                  type="number"
-                  step="any"
-                  required
-                  value={targetValue}
-                  onChange={(e) => setTarget(e.target.value)}
-                  className="w-full rounded-md border border-zinc-200 dark:border-zinc-700 bg-transparent px-3 py-2 text-sm"
-                />
-              </label>
-            </>
-          )}
-          {krType === "milestone" && (
-            <input type="hidden" value="100" readOnly />
-          )}
-        </div>
-        <MetricBindingField value={binding} onChange={setBinding} />
+        )}
+        {progressMode === "auto" && (
+          <MetricBindingField value={binding} onChange={setBinding} />
+        )}
         {error && <p className="text-sm text-red-500">{error}</p>}
         <div className="flex justify-end gap-2">
           <button
@@ -616,25 +673,53 @@ function EditKrDialog({
   onSaved: () => void;
 }) {
   const [title, setTitle] = useState(kr.title);
+  const [progressMode, setProgressMode] = useState<"auto" | "manual">(
+    kr.progressMode,
+  );
+  const [krType, setKrType] = useState<KrType>(kr.krType);
+  const [startValue, setStart] = useState(kr.startValue);
   const [targetValue, setTarget] = useState(kr.targetValue);
   const [currentValue, setCurrent] = useState(kr.currentValue);
+  const [unit, setUnit] = useState(kr.unit ?? "");
   const [editReason, setReason] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const targetChanged = targetValue !== kr.targetValue;
+  const modeChanged = progressMode !== kr.progressMode;
+  const requireStrategyInputs = modeChanged && progressMode === "auto";
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (requireStrategyInputs) {
+      if (startValue === "" || targetValue === "") {
+        setError(
+          "Switching to calculated mode needs start and target values.",
+        );
+        return;
+      }
+    }
     setBusy(true);
     setError(null);
     try {
-      await apiSend(`/api/v1/key-results/${kr.id}`, "PATCH", {
-        title,
-        targetValue: Number(targetValue),
-        currentValue: Number(currentValue),
-        ...(targetChanged && editReason ? { editReason } : {}),
-      });
+      const payload: Record<string, unknown> = { title };
+      if (progressMode === "manual") {
+        payload.currentValue = Number(currentValue);
+      } else {
+        payload.currentValue = Number(currentValue);
+        payload.targetValue = Number(targetValue);
+      }
+      if (modeChanged) {
+        payload.progressMode = progressMode;
+        if (progressMode === "auto") {
+          payload.krType = krType;
+          payload.startValue = Number(startValue);
+          payload.targetValue = Number(targetValue);
+          payload.unit = unit || null;
+        }
+      }
+      if (targetChanged && editReason) payload.editReason = editReason;
+      await apiSend(`/api/v1/key-results/${kr.id}`, "PATCH", payload);
       onSaved();
     } catch (err) {
       setError(err instanceof ApiRequestError ? err.message : "Failed");
@@ -663,28 +748,98 @@ function EditKrDialog({
             className="w-full rounded-md border border-zinc-200 dark:border-zinc-700 bg-transparent px-3 py-2 text-sm"
           />
         </label>
-        <div className="grid grid-cols-2 gap-3">
-          <label className="text-sm space-y-1">
-            <span className="text-zinc-700 dark:text-zinc-300">Current</span>
+        <label className="block text-sm space-y-1">
+          <span className="text-zinc-700 dark:text-zinc-300">
+            Track progress by
+          </span>
+          <select
+            value={progressMode}
+            onChange={(e) =>
+              setProgressMode(e.target.value as "auto" | "manual")
+            }
+            className="w-full rounded-md border border-zinc-200 dark:border-zinc-700 bg-transparent px-3 py-2 text-sm"
+          >
+            <option value="auto">Calculation (start → target)</option>
+            <option value="manual">Manual progress %</option>
+          </select>
+        </label>
+        {progressMode === "manual" ? (
+          <label className="block text-sm space-y-1">
+            <span className="text-zinc-700 dark:text-zinc-300">Progress (%)</span>
             <input
               type="number"
-              step="any"
+              min={0}
+              max={100}
+              step={1}
               value={currentValue}
               onChange={(e) => setCurrent(e.target.value)}
               className="w-full rounded-md border border-zinc-200 dark:border-zinc-700 bg-transparent px-3 py-2 text-sm"
             />
           </label>
-          <label className="text-sm space-y-1">
-            <span className="text-zinc-700 dark:text-zinc-300">Target</span>
-            <input
-              type="number"
-              step="any"
-              value={targetValue}
-              onChange={(e) => setTarget(e.target.value)}
-              className="w-full rounded-md border border-zinc-200 dark:border-zinc-700 bg-transparent px-3 py-2 text-sm"
-            />
-          </label>
-        </div>
+        ) : (
+          <>
+            {requireStrategyInputs && (
+              <p className="text-xs text-amber-600">
+                Switching back to calculation. Set a type, start, and target.
+              </p>
+            )}
+            <div className="grid grid-cols-2 gap-3">
+              <label className="text-sm space-y-1">
+                <span className="text-zinc-700 dark:text-zinc-300">Type</span>
+                <select
+                  value={krType}
+                  onChange={(e) => setKrType(e.target.value as KrType)}
+                  className="w-full rounded-md border border-zinc-200 dark:border-zinc-700 bg-transparent px-3 py-2 text-sm"
+                  disabled={!modeChanged}
+                >
+                  <option value="number">Number</option>
+                  <option value="percentage">Percentage</option>
+                  <option value="currency">Currency ($)</option>
+                  <option value="milestone">Milestone</option>
+                </select>
+              </label>
+              <label className="text-sm space-y-1">
+                <span className="text-zinc-700 dark:text-zinc-300">Unit</span>
+                <input
+                  value={unit}
+                  onChange={(e) => setUnit(e.target.value)}
+                  className="w-full rounded-md border border-zinc-200 dark:border-zinc-700 bg-transparent px-3 py-2 text-sm"
+                />
+              </label>
+              <label className="text-sm space-y-1">
+                <span className="text-zinc-700 dark:text-zinc-300">Current</span>
+                <input
+                  type="number"
+                  step="any"
+                  value={currentValue}
+                  onChange={(e) => setCurrent(e.target.value)}
+                  className="w-full rounded-md border border-zinc-200 dark:border-zinc-700 bg-transparent px-3 py-2 text-sm"
+                />
+              </label>
+              <label className="text-sm space-y-1">
+                <span className="text-zinc-700 dark:text-zinc-300">Start</span>
+                <input
+                  type="number"
+                  step="any"
+                  value={startValue}
+                  onChange={(e) => setStart(e.target.value)}
+                  className="w-full rounded-md border border-zinc-200 dark:border-zinc-700 bg-transparent px-3 py-2 text-sm"
+                  disabled={!modeChanged}
+                />
+              </label>
+              <label className="text-sm space-y-1">
+                <span className="text-zinc-700 dark:text-zinc-300">Target</span>
+                <input
+                  type="number"
+                  step="any"
+                  value={targetValue}
+                  onChange={(e) => setTarget(e.target.value)}
+                  className="w-full rounded-md border border-zinc-200 dark:border-zinc-700 bg-transparent px-3 py-2 text-sm"
+                />
+              </label>
+            </div>
+          </>
+        )}
         {targetChanged && (
           <label className="block text-sm space-y-1">
             <span className="text-zinc-700 dark:text-zinc-300">

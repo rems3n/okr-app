@@ -6,24 +6,26 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 
 import { DraftAssistant } from "@/components/ai/draft-assistant";
+import { ExpandableObjectiveRow } from "@/components/okr/expandable-objective-row";
 import { OkrTree } from "@/components/okr/okr-tree";
 import { ObjectivePanel } from "@/components/okr/objective-panel";
-import {
-  LevelIcon,
-  PaceDot,
-  ProgressBar,
-} from "@/components/okr/objective-row";
 import { useCycles } from "@/hooks/use-cycles";
 import { useMembers } from "@/hooks/use-members";
 import { useObjectives } from "@/hooks/use-objectives";
 import { useTeams } from "@/hooks/use-teams";
 import { apiSend, ApiRequestError } from "@/lib/api/client";
+import { can, type Role } from "@/lib/auth/permissions";
 import type { Objective } from "@/lib/db/schema";
-import { pace, type Pace } from "@/lib/okr/progress";
 
 type View = "tree" | "list";
 
-export function ObjectivesPage({ currentUserId }: { currentUserId: string }) {
+export function ObjectivesPage({
+  currentUserId,
+  currentRole,
+}: {
+  currentUserId: string;
+  currentRole: Role;
+}) {
   const { cycles, isLoading: cyclesLoading } = useCycles();
   const defaultCycleId = useMemo(() => {
     if (cycles.length === 0) return null;
@@ -209,12 +211,16 @@ export function ObjectivesPage({ currentUserId }: { currentUserId: string }) {
           objectives={visibleForTree}
           cycle={cycle}
           onSelect={(o) => setPanelId(o.id)}
+          currentUserId={currentUserId}
+          currentRole={currentRole}
         />
       ) : (
         <ListView
           objectives={filtered}
           cycle={cycle}
           onSelect={(o) => setPanelId(o.id)}
+          currentUserId={currentUserId}
+          currentRole={currentRole}
         />
       )}
 
@@ -241,10 +247,14 @@ function ListView({
   objectives,
   cycle,
   onSelect,
+  currentUserId,
+  currentRole,
 }: {
   objectives: Objective[];
   cycle: { startDate: string; endDate: string } | null;
   onSelect: (o: Objective) => void;
+  currentUserId: string;
+  currentRole: Role;
 }) {
   if (objectives.length === 0) {
     return (
@@ -253,32 +263,20 @@ function ListView({
       </p>
     );
   }
+  const isAdmin = can(currentRole, "team.manage");
   return (
-    <div className="border border-zinc-200 dark:border-zinc-800 rounded-lg bg-white dark:bg-zinc-950 divide-y divide-zinc-200 dark:divide-zinc-800">
+    <div className="border border-zinc-200 dark:border-zinc-800 rounded-lg bg-white dark:bg-zinc-950">
       {objectives.map((o) => {
-        const paceStatus: Pace | "no_data" = cycle
-          ? pace({
-              actualProgress: Number(o.progress),
-              cycleStart: new Date(cycle.startDate),
-              cycleEnd: new Date(cycle.endDate),
-            }).status
-          : "no_data";
+        const isOwner = o.ownerUserId === currentUserId;
         return (
-          <button
+          <ExpandableObjectiveRow
             key={o.id}
-            type="button"
-            onClick={() => onSelect(o)}
-            className="w-full text-left px-4 py-3 hover:bg-zinc-50 dark:hover:bg-zinc-900 flex items-center gap-3"
-          >
-            <LevelIcon objective={o} />
-            <div className="flex-1 min-w-0">
-              <p className="font-medium truncate">{o.title}</p>
-            </div>
-            <div className="flex items-center gap-4 shrink-0">
-              <PaceDot status={paceStatus} />
-              <ProgressBar value={Number(o.progress)} />
-            </div>
-          </button>
+            objective={o}
+            cycle={cycle}
+            canEditObjective={isOwner || isAdmin}
+            canEditKrs={isOwner || isAdmin}
+            onSelect={(id) => onSelect({ ...o, id })}
+          />
         );
       })}
     </div>

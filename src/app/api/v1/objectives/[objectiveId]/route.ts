@@ -60,6 +60,12 @@ export const GET = withAuth<undefined, { objectiveId: string }>({
         ];
       }),
     );
+    const latestCheckIns = await db.latestCheckInsFor(
+      keyResults.map((kr) => kr.id),
+    );
+    const confidenceByKr = Object.fromEntries(
+      latestCheckIns.map((c) => [c.keyResultId, c.confidence]),
+    ) as Record<string, "on_track" | "at_risk" | "off_track">;
     const cycle = await db.getCycleById(obj.cycleId);
     return {
       objective: obj,
@@ -69,6 +75,7 @@ export const GET = withAuth<undefined, { objectiveId: string }>({
       parent,
       bindingsByKr,
       scoresByKr,
+      confidenceByKr,
     };
   },
 });
@@ -80,6 +87,11 @@ const PatchInput = z.object({
   parentObjectiveId: z.uuid().nullish(),
   status: z.enum(["draft", "active", "closed"]).optional(),
   ownerUserId: z.uuid().optional(),
+  // Leader override of the derived pace indicator. `null` clears the override.
+  manualPaceStatus: z
+    .enum(["ahead", "on_pace", "behind"])
+    .nullable()
+    .optional(),
   editReason: z.string().max(500).optional(),
 });
 

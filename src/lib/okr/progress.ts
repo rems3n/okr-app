@@ -5,18 +5,22 @@ const clamp = (n: number, min = 0, max = 100) =>
 
 /**
  * KR progress on a 0–100 scale.
+ *   progressMode = 'manual'        → current_value is the % directly
+ *   krType = milestone             → current_value is 0 or 100 directly
  *   number / percentage / currency → (current − start) / (target − start)
- *   milestone                      → current_value is 0 or 100 directly
  * Non-finite or zero-range KRs collapse to 0 so UI never renders NaN.
  */
 export function krProgress(
-  kr: Pick<KeyResult, "krType" | "startValue" | "targetValue" | "currentValue">,
+  kr: Pick<
+    KeyResult,
+    "krType" | "startValue" | "targetValue" | "currentValue" | "progressMode"
+  >,
 ): number {
   const start = Number(kr.startValue);
   const target = Number(kr.targetValue);
   const current = Number(kr.currentValue);
 
-  if (kr.krType === "milestone") {
+  if (kr.progressMode === "manual" || kr.krType === "milestone") {
     return clamp(current);
   }
 
@@ -32,7 +36,10 @@ export function krProgress(
  * objectives that nest rather than hold KRs). Returns 0 when neither exists.
  */
 export function objectiveProgress(
-  krs: Pick<KeyResult, "krType" | "startValue" | "targetValue" | "currentValue">[],
+  krs: Pick<
+    KeyResult,
+    "krType" | "startValue" | "targetValue" | "currentValue" | "progressMode"
+  >[],
   childObjectives: Pick<Objective, "progress">[] = [],
 ): number {
   if (krs.length > 0) {
@@ -53,22 +60,29 @@ export type Pace = "ahead" | "on_pace" | "behind";
 /**
  * Compares actual progress against time-elapsed in the cycle. A 15pt lag is
  * the "on pace" tolerance; anything beyond that goes yellow.
+ *
+ * `override` (from objectives.manual_pace_status) short-circuits the derived
+ * status but still returns the computed delta/expected so tooltips can show
+ * what the override is disagreeing with.
  */
 export function pace(opts: {
   actualProgress: number;
   cycleStart: Date;
   cycleEnd: Date;
   now?: Date;
-}): { delta: number; expected: number; status: Pace } {
+  override?: Pace | null;
+}): { delta: number; expected: number; status: Pace; overridden: boolean } {
   const now = opts.now ?? new Date();
   const total = opts.cycleEnd.getTime() - opts.cycleStart.getTime();
   if (total <= 0) {
-    return { delta: 0, expected: 0, status: "on_pace" };
+    const status = opts.override ?? "on_pace";
+    return { delta: 0, expected: 0, status, overridden: !!opts.override };
   }
   const elapsed = now.getTime() - opts.cycleStart.getTime();
   const expected = clamp((elapsed / total) * 100);
   const delta = opts.actualProgress - expected;
-  const status: Pace =
+  const derived: Pace =
     delta >= 0 ? "ahead" : delta >= -15 ? "on_pace" : "behind";
-  return { delta, expected, status };
+  const status: Pace = opts.override ?? derived;
+  return { delta, expected, status, overridden: !!opts.override };
 }

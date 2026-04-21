@@ -779,6 +779,7 @@ export function scopedDb(organizationId: string, db: AnyDb = defaultDb) {
             startValue: k.startValue,
             targetValue: k.targetValue,
             currentValue: k.currentValue,
+            progressMode: k.progressMode,
           })),
         );
       } else {

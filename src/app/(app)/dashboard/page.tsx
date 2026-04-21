@@ -4,11 +4,8 @@ import { AiSummaryCard } from "@/components/ai/summary-card";
 import { ActivityFeed } from "@/components/dashboard/activity-feed";
 import { AtRiskList, type AtRiskKrRow } from "@/components/dashboard/at-risk-list";
 import { KpiRow } from "@/components/dashboard/kpi-row";
-import {
-  LevelIcon,
-  PaceDot,
-  ProgressBar,
-} from "@/components/okr/objective-row";
+import { ExpandableObjectiveRow } from "@/components/okr/expandable-objective-row";
+import { can, type Role } from "@/lib/auth/permissions";
 import { getAuthContext } from "@/lib/auth/get-current-user";
 import { scopedDb } from "@/lib/db/scoped";
 import { pace, type Pace } from "@/lib/okr/progress";
@@ -224,7 +221,9 @@ export default async function DashboardPage() {
           <ObjectivesPanel
             title="Company objectives"
             objectives={topLevel}
-            paceOf={paceOf}
+            cycle={currentCycle}
+            currentUserId={ctx.userId}
+            currentRole={ctx.role}
             emptyMessage="No top-level objectives yet."
           />
           {needsAttention.length > 0 && (
@@ -232,7 +231,9 @@ export default async function DashboardPage() {
               title="Needs attention"
               subtitle="Behind pace — surface these in the next review"
               objectives={needsAttention}
-              paceOf={paceOf}
+              cycle={currentCycle}
+              currentUserId={ctx.userId}
+              currentRole={ctx.role}
               emptyMessage=""
               accent="amber"
             />
@@ -241,7 +242,9 @@ export default async function DashboardPage() {
             <ObjectivesPanel
               title="Your objectives"
               objectives={mine}
-              paceOf={paceOf}
+              cycle={currentCycle}
+              currentUserId={ctx.userId}
+              currentRole={ctx.role}
               emptyMessage=""
             />
           )}
@@ -251,7 +254,9 @@ export default async function DashboardPage() {
           <ObjectivesPanel
             title="Your objectives"
             objectives={mine}
-            paceOf={paceOf}
+            cycle={currentCycle}
+            currentUserId={ctx.userId}
+            currentRole={ctx.role}
             emptyMessage="You don't own any objectives in this cycle yet."
             action={
               <Link
@@ -265,7 +270,9 @@ export default async function DashboardPage() {
           <ObjectivesPanel
             title="Company objectives"
             objectives={topLevel}
-            paceOf={paceOf}
+            cycle={currentCycle}
+            currentUserId={ctx.userId}
+            currentRole={ctx.role}
             emptyMessage="No company-level objectives yet."
           />
         </>
@@ -280,13 +287,17 @@ type ObjectiveSummary = {
   progress: string;
   teamId: string | null;
   parentObjectiveId: string | null;
+  ownerUserId: string;
+  manualPaceStatus: "ahead" | "on_pace" | "behind" | null;
 };
 
 function ObjectivesPanel({
   title,
   subtitle,
   objectives,
-  paceOf,
+  cycle,
+  currentUserId,
+  currentRole,
   emptyMessage,
   action,
   accent,
@@ -294,11 +305,14 @@ function ObjectivesPanel({
   title: string;
   subtitle?: string;
   objectives: ObjectiveSummary[];
-  paceOf: (progress: number) => Pace | "no_data";
+  cycle: { startDate: string; endDate: string };
+  currentUserId: string;
+  currentRole: Role;
   emptyMessage: string;
   action?: React.ReactNode;
   accent?: "amber";
 }) {
+  const isAdmin = can(currentRole, "team.manage");
   return (
     <div>
       <div className="flex items-baseline justify-between mb-3">
@@ -319,21 +333,19 @@ function ObjectivesPanel({
           <p className="text-sm text-zinc-500">{emptyMessage}</p>
         )
       ) : (
-        <div className="border border-zinc-200 dark:border-zinc-800 rounded-lg bg-white dark:bg-zinc-950 divide-y divide-zinc-200 dark:divide-zinc-800">
-          {objectives.map((o) => (
-            <Link
-              key={o.id}
-              href={`/objectives/${o.id}`}
-              className="block px-4 py-3 hover:bg-zinc-50 dark:hover:bg-zinc-900 flex items-center gap-3"
-            >
-              <LevelIcon objective={o} />
-              <p className="flex-1 min-w-0 font-medium truncate">{o.title}</p>
-              <div className="flex items-center gap-4 shrink-0">
-                <PaceDot status={paceOf(Number(o.progress))} />
-                <ProgressBar value={Number(o.progress)} />
-              </div>
-            </Link>
-          ))}
+        <div className="border border-zinc-200 dark:border-zinc-800 rounded-lg bg-white dark:bg-zinc-950">
+          {objectives.map((o) => {
+            const isOwner = o.ownerUserId === currentUserId;
+            return (
+              <ExpandableObjectiveRow
+                key={o.id}
+                objective={o}
+                cycle={cycle}
+                canEditObjective={isOwner || isAdmin}
+                canEditKrs={isOwner || isAdmin}
+              />
+            );
+          })}
         </div>
       )}
     </div>

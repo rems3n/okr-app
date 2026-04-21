@@ -2,6 +2,8 @@
 
 import { Building2, ChevronRight, User, Users } from "lucide-react";
 
+import { useMembers } from "@/hooks/use-members";
+import { useTeams } from "@/hooks/use-teams";
 import type { Objective } from "@/lib/db/schema";
 import { type Pace } from "@/lib/okr/progress";
 import { cn } from "@/lib/utils";
@@ -67,6 +69,49 @@ export function PaceDot({ status }: { status: Pace | "no_data" }) {
     <span className="inline-flex items-center gap-1.5 text-xs text-zinc-500">
       <span className={cn("h-2 w-2 rounded-full", color)} aria-hidden />
       {label}
+    </span>
+  );
+}
+
+export function OwnerChip({
+  userId,
+  ownerName,
+}: {
+  userId: string;
+  ownerName?: string | null;
+}) {
+  const { members } = useMembers();
+  const name =
+    ownerName ?? members.find((m) => m.id === userId)?.name ?? null;
+  if (!name) return null;
+  return (
+    <span
+      className="inline-flex items-center gap-1 text-xs text-zinc-500"
+      title={`Owner: ${name}`}
+    >
+      <User className="h-3 w-3" aria-hidden />
+      <span className="max-w-[9rem] truncate">{name}</span>
+    </span>
+  );
+}
+
+export function TeamChip({
+  teamId,
+  teamName,
+}: {
+  teamId: string | null;
+  teamName?: string | null;
+}) {
+  const { teams } = useTeams();
+  if (!teamId) return null;
+  const name = teamName ?? teams.find((t) => t.id === teamId)?.name ?? null;
+  if (!name) return null;
+  return (
+    <span
+      className="inline-flex items-center gap-1 rounded-md border border-zinc-200 dark:border-zinc-700 px-1.5 py-0.5 text-xs text-zinc-500"
+      title={`Team: ${name}`}
+    >
+      {name}
     </span>
   );
 }

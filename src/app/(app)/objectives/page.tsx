@@ -3,5 +3,7 @@ import { getAuthContext } from "@/lib/auth/get-current-user";
 
 export default async function Page() {
   const ctx = await getAuthContext();
-  return <ObjectivesPage currentUserId={ctx.userId} />;
+  return (
+    <ObjectivesPage currentUserId={ctx.userId} currentRole={ctx.role} />
+  );
 }

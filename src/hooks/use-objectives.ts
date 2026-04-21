@@ -25,6 +25,7 @@ export type ObjectiveDetail = {
     string,
     { score: string; finalValue: string; reflection: string } | null
   >;
+  confidenceByKr: Record<string, "on_track" | "at_risk" | "off_track">;
 };
 
 export function useObjective(objectiveId: string | null) {

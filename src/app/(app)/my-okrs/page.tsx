@@ -1,13 +1,9 @@
 import Link from "next/link";
 
-import {
-  LevelIcon,
-  PaceDot,
-  ProgressBar,
-} from "@/components/okr/objective-row";
+import { ExpandableObjectiveRow } from "@/components/okr/expandable-objective-row";
+import { can } from "@/lib/auth/permissions";
 import { getAuthContext } from "@/lib/auth/get-current-user";
 import { scopedDb } from "@/lib/db/scoped";
-import { pace, type Pace } from "@/lib/okr/progress";
 
 export default async function MyOkrsPage() {
   const ctx = await getAuthContext();
@@ -42,11 +38,7 @@ export default async function MyOkrsPage() {
     await Promise.all(parentIds.map((id) => db.getObjectiveById(id)))
   ).filter((p): p is NonNullable<typeof p> => p !== null);
 
-  const cycleStart = new Date(cycle.startDate);
-  const cycleEnd = new Date(cycle.endDate);
-
-  const paceFor = (progress: number): Pace | "no_data" =>
-    pace({ actualProgress: progress, cycleStart, cycleEnd }).status;
+  const isAdmin = can(ctx.role, "team.manage");
 
   return (
     <section className="max-w-4xl space-y-6">
@@ -66,27 +58,15 @@ export default async function MyOkrsPage() {
           </Link>
         </div>
       ) : (
-        <div className="border border-zinc-200 dark:border-zinc-800 rounded-lg bg-white dark:bg-zinc-950 divide-y divide-zinc-200 dark:divide-zinc-800">
+        <div className="border border-zinc-200 dark:border-zinc-800 rounded-lg bg-white dark:bg-zinc-950">
           {mine.map((o) => (
-            <Link
+            <ExpandableObjectiveRow
               key={o.id}
-              href={`/objectives/${o.id}`}
-              className="block px-4 py-3 hover:bg-zinc-50 dark:hover:bg-zinc-900 flex items-center gap-3"
-            >
-              <LevelIcon objective={o} />
-              <div className="flex-1 min-w-0">
-                <p className="font-medium truncate">{o.title}</p>
-                {o.description && (
-                  <p className="text-xs text-zinc-500 truncate">
-                    {o.description}
-                  </p>
-                )}
-              </div>
-              <div className="flex items-center gap-4 shrink-0">
-                <PaceDot status={paceFor(Number(o.progress))} />
-                <ProgressBar value={Number(o.progress)} />
-              </div>
-            </Link>
+              objective={o}
+              cycle={cycle}
+              canEditObjective
+              canEditKrs
+            />
           ))}
         </div>
       )}
@@ -94,21 +74,19 @@ export default async function MyOkrsPage() {
       {parents.length > 0 && (
         <div>
           <h2 className="text-lg font-semibold mb-3">You contribute to</h2>
-          <div className="border border-zinc-200 dark:border-zinc-800 rounded-lg bg-white dark:bg-zinc-950 divide-y divide-zinc-200 dark:divide-zinc-800">
-            {parents.map((p) => (
-              <Link
-                key={p.id}
-                href={`/objectives/${p.id}`}
-                className="block px-4 py-3 hover:bg-zinc-50 dark:hover:bg-zinc-900 flex items-center gap-3"
-              >
-                <LevelIcon objective={p} />
-                <p className="flex-1 min-w-0 font-medium truncate">{p.title}</p>
-                <div className="flex items-center gap-4 shrink-0">
-                  <PaceDot status={paceFor(Number(p.progress))} />
-                  <ProgressBar value={Number(p.progress)} />
-                </div>
-              </Link>
-            ))}
+          <div className="border border-zinc-200 dark:border-zinc-800 rounded-lg bg-white dark:bg-zinc-950">
+            {parents.map((p) => {
+              const isOwner = p.ownerUserId === ctx.userId;
+              return (
+                <ExpandableObjectiveRow
+                  key={p.id}
+                  objective={p}
+                  cycle={cycle}
+                  canEditObjective={isOwner || isAdmin}
+                  canEditKrs={isOwner || isAdmin}
+                />
+              );
+            })}
           </div>
         </div>
       )}

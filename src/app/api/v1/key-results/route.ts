@@ -9,8 +9,10 @@ const CreateInput = z.object({
   krType: z.enum(["number", "percentage", "currency", "milestone"]),
   startValue: z.number(),
   targetValue: z.number(),
+  currentValue: z.number().optional(),
   unit: z.string().max(32).nullish(),
   ownerUserId: z.uuid().optional(),
+  progressMode: z.enum(["auto", "manual"]).optional(),
 });
 
 export const POST = withAuth<z.infer<typeof CreateInput>>({
@@ -36,8 +38,9 @@ export const POST = withAuth<z.infer<typeof CreateInput>>({
         krType: input.krType,
         startValue: input.startValue.toString(),
         targetValue: input.targetValue.toString(),
-        currentValue: input.startValue.toString(),
+        currentValue: (input.currentValue ?? input.startValue).toString(),
         unit: input.unit ?? null,
+        ...(input.progressMode ? { progressMode: input.progressMode } : {}),
       },
       ctx.userId,
     );

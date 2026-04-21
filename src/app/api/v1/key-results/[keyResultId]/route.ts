@@ -7,6 +7,7 @@ import {
   ForbiddenError,
   NotFoundError,
 } from "@/lib/errors";
+import { krProgress } from "@/lib/okr/progress";
 
 export const GET = withAuth<undefined, { keyResultId: string }>({
   handler: async ({ db, params }) => {
@@ -23,6 +24,7 @@ const PatchInput = z.object({
   targetValue: z.number().optional(),
   currentValue: z.number().optional(),
   unit: z.string().max(32).nullish(),
+  progressMode: z.enum(["auto", "manual"]).optional(),
   sortOrder: z.number().int().optional(),
   editReason: z.string().max(500).optional(),
 });
@@ -51,19 +53,62 @@ export const PATCH = withAuth<
       }
     }
     const { editReason, ...raw } = input;
+
+    // Progress-mode transitions normalize value fields so `krProgress()` stays
+    // meaningful on both sides of the switch. See the KR row UX plan.
+    const modeChanging =
+      raw.progressMode !== undefined && raw.progressMode !== kr.progressMode;
+    let normalizedStart: string | undefined;
+    let normalizedTarget: string | undefined;
+    let normalizedCurrent: string | undefined;
+    let normalizedUnit: string | null | undefined;
+    if (modeChanging && raw.progressMode === "manual") {
+      // auto → manual: snapshot the derived % into currentValue, reset range.
+      const pct = krProgress(kr);
+      normalizedCurrent = pct.toString();
+      normalizedStart = "0";
+      normalizedTarget = "100";
+      normalizedUnit = "%";
+    } else if (modeChanging && raw.progressMode === "auto") {
+      // manual → auto: caller must supply new start/target/krType because
+      // 0-100 doesn't tell us what the real metric is.
+      if (
+        raw.startValue === undefined ||
+        raw.targetValue === undefined ||
+        raw.krType === undefined
+      ) {
+        throw new BadRequestError(
+          "Switching a KR from manual to auto requires krType, startValue, and targetValue in the same request",
+        );
+      }
+    }
+
     const patch = {
       ...(raw.title !== undefined ? { title: raw.title } : {}),
       ...(raw.krType !== undefined ? { krType: raw.krType } : {}),
-      ...(raw.startValue !== undefined
-        ? { startValue: raw.startValue.toString() }
+      ...(normalizedStart !== undefined
+        ? { startValue: normalizedStart }
+        : raw.startValue !== undefined
+          ? { startValue: raw.startValue.toString() }
+          : {}),
+      ...(normalizedTarget !== undefined
+        ? { targetValue: normalizedTarget }
+        : raw.targetValue !== undefined
+          ? { targetValue: raw.targetValue.toString() }
+          : {}),
+      ...(normalizedCurrent !== undefined
+        ? { currentValue: normalizedCurrent }
+        : raw.currentValue !== undefined
+          ? { currentValue: raw.currentValue.toString() }
+          : {}),
+      ...(normalizedUnit !== undefined
+        ? { unit: normalizedUnit }
+        : raw.unit !== undefined
+          ? { unit: raw.unit }
+          : {}),
+      ...(raw.progressMode !== undefined
+        ? { progressMode: raw.progressMode }
         : {}),
-      ...(raw.targetValue !== undefined
-        ? { targetValue: raw.targetValue.toString() }
-        : {}),
-      ...(raw.currentValue !== undefined
-        ? { currentValue: raw.currentValue.toString() }
-        : {}),
-      ...(raw.unit !== undefined ? { unit: raw.unit } : {}),
       ...(raw.sortOrder !== undefined ? { sortOrder: raw.sortOrder } : {}),
     };
     const updated = await db.updateKeyResult(
