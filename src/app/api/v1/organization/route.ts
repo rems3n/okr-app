@@ -1,6 +1,9 @@
+import { eq } from "drizzle-orm";
 import { z } from "zod";
 
 import { withAuth } from "@/lib/api/with-auth";
+import { db as rawDb } from "@/lib/db";
+import { organizations } from "@/lib/db/schema";
 import { NotFoundError } from "@/lib/errors";
 
 export const GET = withAuth({
@@ -12,19 +15,23 @@ export const GET = withAuth({
 });
 
 const PatchInput = z.object({
-  name: z.string().min(1).max(120).optional(),
+  companySize: z.enum(["1-10", "11-25", "26-50", "50+"]).optional(),
+  industry: z.string().max(80).optional(),
+  onboardingCompleted: z.boolean().optional(),
 });
 
 export const PATCH = withAuth({
   require: "org.manage",
   input: PatchInput,
-  handler: async ({ db, input }) => {
+  handler: async ({ ctx, db, input }) => {
     const org = await db.getOrganization();
     if (!org) throw new NotFoundError("Organization not found");
-    // Name also lives in Clerk — Sprint 1 keeps Clerk as source of truth for
-    // identity fields, so we intentionally skip the DB write and document it.
-    // For now this endpoint is read-only aside from onboarding_completed.
-    void input;
-    return org;
+    if (Object.keys(input).length === 0) return org;
+    const [updated] = await rawDb
+      .update(organizations)
+      .set({ ...input, updatedAt: new Date() })
+      .where(eq(organizations.id, ctx.orgId))
+      .returning();
+    return updated ?? org;
   },
 });

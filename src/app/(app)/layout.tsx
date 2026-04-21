@@ -41,6 +41,7 @@ export default async function AppLayout({
   // Hydrates Postgres rows if the Clerk webhook hasn't landed yet.
   const ctx = await getAuthContext();
   const org = await scopedDb(ctx.orgId).getOrganization();
+  if (org && !org.onboardingCompleted) redirect("/onboarding");
   const trialEndsAt = org?.trialEndsAt ? new Date(org.trialEndsAt) : null;
   const trialDaysLeft = trialEndsAt ? daysUntil(trialEndsAt) : 0;
   const showTrialBanner =

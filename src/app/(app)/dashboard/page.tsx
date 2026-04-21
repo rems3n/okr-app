@@ -73,17 +73,53 @@ export default async function DashboardPage() {
 
   return (
     <section className="max-w-5xl space-y-6">
-      <header>
-        <h1 className="text-2xl font-semibold tracking-tight">
-          {currentCycle.name}
-        </h1>
-        <p className="mt-1 text-sm text-zinc-500 capitalize">
-          {currentCycle.status} · {daysRemaining} days remaining ·{" "}
-          {objectives.length}{" "}
-          {objectives.length === 1 ? "objective" : "objectives"} · avg{" "}
-          {Math.round(avgProgress)}%
-        </p>
+      <header className="flex items-start justify-between gap-3 flex-wrap">
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight">
+            {currentCycle.name}
+          </h1>
+          <p className="mt-1 text-sm text-zinc-500 capitalize">
+            {currentCycle.status} · {daysRemaining} days remaining ·{" "}
+            {objectives.length}{" "}
+            {objectives.length === 1 ? "objective" : "objectives"} · avg{" "}
+            {Math.round(avgProgress)}%
+          </p>
+        </div>
+        {objectives.length > 0 && (
+          <Link
+            href="/objectives?create=1"
+            className="rounded-md bg-zinc-900 text-white px-3 py-1.5 text-sm dark:bg-zinc-50 dark:text-zinc-900"
+          >
+            New objective
+          </Link>
+        )}
       </header>
+
+      {objectives.length === 0 && (
+        <div className="rounded-lg border border-violet-200 dark:border-violet-900 bg-violet-50 dark:bg-violet-950/40 p-6 space-y-3">
+          <h2 className="text-lg font-semibold text-violet-900 dark:text-violet-200">
+            Create your first objective
+          </h2>
+          <p className="text-sm text-violet-800/80 dark:text-violet-300/80">
+            Objectives are the outcomes you want this {currentCycle.name}.
+            Each gets 2–3 measurable Key Results.
+          </p>
+          <div className="flex gap-2">
+            <Link
+              href="/objectives?create=1"
+              className="rounded-md bg-violet-700 text-white px-3 py-1.5 text-sm hover:bg-violet-800"
+            >
+              New objective
+            </Link>
+            <Link
+              href="/objectives?draft=1"
+              className="rounded-md border border-violet-300 dark:border-violet-800 text-violet-800 dark:text-violet-300 px-3 py-1.5 text-sm hover:bg-violet-100 dark:hover:bg-violet-950"
+            >
+              Draft with AI
+            </Link>
+          </div>
+        </div>
+      )}
 
       {pendingKrs.length > 0 && (
         <Link

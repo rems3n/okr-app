@@ -1,8 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { useEffect, useState } from "react";
 
 import { CommentThread } from "@/components/collaboration/comment-thread";
 import {
@@ -32,8 +32,17 @@ export function ObjectiveDetailPage({
 }) {
   const { detail, isLoading, mutate } = useObjective(objectiveId);
   const router = useRouter();
-  const [addingKr, setAddingKr] = useState(false);
+  const searchParams = useSearchParams();
+  const wantAddKr = searchParams.get("addKr") === "1";
+  const [addingKr, setAddingKr] = useState(() => wantAddKr);
   const [editingObj, setEditingObj] = useState(false);
+
+  useEffect(() => {
+    if (!wantAddKr) return;
+    const url = new URL(window.location.href);
+    url.searchParams.delete("addKr");
+    router.replace(`${url.pathname}${url.search}`);
+  }, [wantAddKr, router]);
 
   if (isLoading || !detail) {
     return <p className="text-sm text-zinc-500">Loading…</p>;

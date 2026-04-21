@@ -1,5 +1,7 @@
 import { OrganizationSwitcher, UserButton } from "@clerk/nextjs";
 
+import { NewMenu } from "@/components/layout/new-menu";
+
 export function Header() {
   return (
     <header className="h-14 border-b border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 flex items-center justify-between px-4">
@@ -12,7 +14,10 @@ export function Header() {
           },
         }}
       />
-      <UserButton />
+      <div className="flex items-center gap-3">
+        <NewMenu />
+        <UserButton />
+      </div>
     </header>
   );
 }

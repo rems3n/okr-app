@@ -2,7 +2,8 @@
 
 import { Sparkles } from "lucide-react";
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { useEffect, useMemo, useState } from "react";
 
 import { DraftAssistant } from "@/components/ai/draft-assistant";
 import { OkrTree } from "@/components/okr/okr-tree";
@@ -40,9 +41,22 @@ export function ObjectivesPage({ currentUserId }: { currentUserId: string }) {
   const [ownerFilter, setOwnerFilter] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
   const [search, setSearch] = useState("");
-  const [creating, setCreating] = useState(false);
-  const [draftOpen, setDraftOpen] = useState(false);
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const wantCreate = searchParams.get("create") === "1";
+  const wantDraft = searchParams.get("draft") === "1";
+  const [creating, setCreating] = useState(() => wantCreate);
+  const [draftOpen, setDraftOpen] = useState(() => wantDraft);
   const [panelId, setPanelId] = useState<string | null>(null);
+
+  // Strip the params after we've consumed them so reloads don't reopen.
+  useEffect(() => {
+    if (!wantCreate && !wantDraft) return;
+    const url = new URL(window.location.href);
+    url.searchParams.delete("create");
+    url.searchParams.delete("draft");
+    router.replace(`${url.pathname}${url.search}`);
+  }, [wantCreate, wantDraft, router]);
 
   const cycle = cycles.find((c) => c.id === effectiveCycleId) ?? null;
 
@@ -179,9 +193,11 @@ export function ObjectivesPage({ currentUserId }: { currentUserId: string }) {
           currentUserId={currentUserId}
           existingObjectives={objectives}
           onClose={() => setCreating(false)}
-          onCreated={() => {
+          onCreated={(id) => {
             setCreating(false);
             mutate();
+            // Land on the new objective so the user can add KRs in place.
+            router.push(`/objectives/${id}?addKr=1`);
           }}
         />
       )}
@@ -351,7 +367,7 @@ function CreateObjectiveDialog({
   currentUserId: string;
   existingObjectives: ObjectiveListItem[];
   onClose: () => void;
-  onCreated: () => void;
+  onCreated: (createdId: string) => void;
 }) {
   const { members } = useMembers();
   const { teams } = useTeams();
@@ -368,15 +384,19 @@ function CreateObjectiveDialog({
     setBusy(true);
     setError(null);
     try {
-      await apiSend("/api/v1/objectives", "POST", {
-        cycleId,
-        title,
-        description: description || null,
-        ownerUserId,
-        teamId: teamId || null,
-        parentObjectiveId: parentObjectiveId || null,
-      });
-      onCreated();
+      const created = await apiSend<{ id: string }>(
+        "/api/v1/objectives",
+        "POST",
+        {
+          cycleId,
+          title,
+          description: description || null,
+          ownerUserId,
+          teamId: teamId || null,
+          parentObjectiveId: parentObjectiveId || null,
+        },
+      );
+      onCreated(created.id);
     } catch (err) {
       setError(err instanceof ApiRequestError ? err.message : "Failed");
     } finally {

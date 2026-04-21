@@ -26,6 +26,8 @@ export const organizations = pgTable("organizations", {
   stripeSubscriptionId: text("stripe_subscription_id"),
   trialEndsAt: timestamp("trial_ends_at", { withTimezone: true }),
   onboardingCompleted: boolean("onboarding_completed").notNull().default(false),
+  companySize: text("company_size"),
+  industry: text("industry"),
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
     .default(sql`now()`),

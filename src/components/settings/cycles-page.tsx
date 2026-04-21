@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { useEffect, useState } from "react";
 
 import { useCycles } from "@/hooks/use-cycles";
 import { apiSend, ApiRequestError } from "@/lib/api/client";
@@ -25,7 +26,18 @@ const STATUS_LABELS: Record<CycleStatus, string> = {
 
 export function CyclesPage({ currentRole }: { currentRole: Role }) {
   const { cycles, isLoading, mutate } = useCycles();
-  const [creating, setCreating] = useState(false);
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const wantCreate = searchParams.get("create") === "1";
+  const [creating, setCreating] = useState(() => wantCreate);
+
+  // Strip the `?create=1` after we've consumed it so reloads don't reopen.
+  useEffect(() => {
+    if (!wantCreate) return;
+    const url = new URL(window.location.href);
+    url.searchParams.delete("create");
+    router.replace(`${url.pathname}${url.search}`);
+  }, [wantCreate, router]);
   const canManage = can(currentRole, "org.manage");
 
   return (
