@@ -15,4 +15,4 @@ export function getAnthropic(): Anthropic | null {
   return client;
 }
 
-export const AI_MODEL = "claude-opus-4-7";
+export const AI_MODEL = "claude-sonnet-4-6";
