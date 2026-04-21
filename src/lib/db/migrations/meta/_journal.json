@@ -64,6 +64,13 @@
       "when": 1776731582045,
       "tag": "0008_smooth_sister_grimm",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1776732945832,
+      "tag": "0009_ancient_joystick",
+      "breakpoints": true
     }
   ]
 }

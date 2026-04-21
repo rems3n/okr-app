@@ -48,7 +48,25 @@ export const PROVIDERS: ProviderDef[] = [
     description: "Deal pipeline + win rate from your Bigin CRM.",
     enabled: true,
   },
+  {
+    key: "notion",
+    label: "Notion",
+    description: "Pull pages so AI drafts ground in your docs.",
+    enabled: true,
+  },
+  {
+    key: "google-drive",
+    label: "Google Drive",
+    description: "Index Docs and PDFs for context-aware drafting.",
+    enabled: true,
+  },
 ];
+
+/**
+ * Provider keys whose Nango syncs feed the document/RAG pipeline rather
+ * than the metric pipeline. The Inngest dispatcher uses this to route.
+ */
+export const DOC_SYNC_PROVIDERS = new Set(["notion", "google-drive"]);
 
 export function getProvider(key: string): ProviderDef | null {
   return PROVIDERS.find((p) => p.key === key) ?? null;

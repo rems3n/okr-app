@@ -23,6 +23,22 @@ function loadMigrationSql(): string[] {
   return files.map((f) => fs.readFileSync(path.join(MIGRATIONS_DIR, f), "utf8"));
 }
 
+// pglite has no pgvector. Skip migration statements that require it so the
+// non-RAG tests still exercise the rest of the schema.
+function isVectorStatement(stmt: string): boolean {
+  const s = stmt.toLowerCase();
+  return (
+    s.includes("extension") && s.includes("vector")
+      ? true
+      : s.includes(" vector(") ||
+        s.includes("::vector") ||
+        s.includes("vector_cosine_ops") ||
+        s.includes("using hnsw") ||
+        s.includes("document_chunks") ||
+        s.includes('"document_chunks"')
+  );
+}
+
 /**
  * Boots an ephemeral Postgres (via pglite/WASM) with our migrations applied.
  * Returned `db` is a drizzle instance compatible with scopedDb at runtime —
@@ -37,7 +53,8 @@ export async function createTestDb() {
     const statements = migration
       .split("--> statement-breakpoint")
       .map((s) => s.trim())
-      .filter((s) => s.length > 0);
+      .filter((s) => s.length > 0)
+      .filter((s) => !isVectorStatement(s));
     for (const stmt of statements) {
       await db.execute(sql.raw(stmt));
     }

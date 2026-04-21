@@ -7,6 +7,7 @@ import {
   metricBindings,
   metricDefinitions,
 } from "@/lib/db/schema";
+import { DOC_SYNC_PROVIDERS } from "@/lib/integrations/catalog";
 import { parseConnectionId } from "@/lib/integrations/nango";
 import { inngest } from "@/lib/inngest/client";
 
@@ -216,6 +217,16 @@ export const processNangoSync = inngest.createFunction(
     const parsed = parseConnectionId(connectionId);
     if (!parsed) {
       logger.warn(`Unable to parse connectionId=${connectionId}`);
+      return;
+    }
+
+    // Notion/Drive sync events feed the document/RAG pipeline rather than
+    // the metric pipeline. Re-emit so process-doc-sync handles them.
+    if (DOC_SYNC_PROVIDERS.has(parsed.provider)) {
+      await step.sendEvent("forward-to-doc-sync", {
+        name: "doc/sync.completed",
+        data: payload as Record<string, unknown>,
+      });
       return;
     }
 

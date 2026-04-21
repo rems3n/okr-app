@@ -12,6 +12,7 @@ import {
   timestamp,
   uniqueIndex,
   uuid,
+  vector,
 } from "drizzle-orm/pg-core";
 
 export const organizations = pgTable("organizations", {
@@ -522,6 +523,72 @@ export const cycleShareTokens = pgTable(
 
 export type CycleShareToken = typeof cycleShareTokens.$inferSelect;
 export type NewCycleShareToken = typeof cycleShareTokens.$inferInsert;
+
+/**
+ * Documents synced from external knowledge sources (Notion pages, Google
+ * Drive files). Used by the AI draft assistant to ground suggestions in
+ * real company context.
+ */
+export const documents = pgTable(
+  "documents",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    integrationConnectedId: uuid("integration_connected_id")
+      .notNull()
+      .references(() => integrationsConnected.id, { onDelete: "cascade" }),
+    provider: text("provider").notNull(),
+    sourceId: text("source_id").notNull(),
+    sourceUrl: text("source_url"),
+    title: text("title").notNull(),
+    sourceUpdatedAt: timestamp("source_updated_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .default(sql`now()`),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .default(sql`now()`),
+  },
+  (t) => [
+    uniqueIndex("uq_doc_provider_source").on(
+      t.organizationId,
+      t.provider,
+      t.sourceId,
+    ),
+    index("idx_documents_org").on(t.organizationId),
+  ],
+);
+
+export const documentChunks = pgTable(
+  "document_chunks",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    documentId: uuid("document_id")
+      .notNull()
+      .references(() => documents.id, { onDelete: "cascade" }),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    chunkIndex: integer("chunk_index").notNull(),
+    content: text("content").notNull(),
+    embedding: vector("embedding", { dimensions: 1536 }),
+    tokens: integer("tokens").notNull().default(0),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .default(sql`now()`),
+  },
+  (t) => [
+    uniqueIndex("uq_chunk_doc_index").on(t.documentId, t.chunkIndex),
+    index("idx_chunks_org").on(t.organizationId),
+  ],
+);
+
+export type Document = typeof documents.$inferSelect;
+export type NewDocument = typeof documents.$inferInsert;
+export type DocumentChunk = typeof documentChunks.$inferSelect;
+export type NewDocumentChunk = typeof documentChunks.$inferInsert;
 export type CheckIn = typeof checkIns.$inferSelect;
 export type NewCheckIn = typeof checkIns.$inferInsert;
 export type IntegrationConnected = typeof integrationsConnected.$inferSelect;

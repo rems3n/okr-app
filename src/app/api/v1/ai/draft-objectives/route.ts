@@ -3,6 +3,7 @@ import { z } from "zod";
 import { withAuth } from "@/lib/api/with-auth";
 import { AI_MODEL, getAnthropic } from "@/lib/ai/client";
 import { DRAFT_OBJECTIVES_SYSTEM } from "@/lib/ai/prompts";
+import { formatChunksForPrompt, retrieveContext } from "@/lib/ai/rag";
 import { BadRequestError, NotFoundError } from "@/lib/errors";
 
 const Input = z.object({
@@ -48,6 +49,15 @@ export const POST = withAuth<z.infer<typeof Input>>({
     const team =
       input.teamId ? await db.getTeamById(input.teamId) : null;
 
+    // RAG: pull relevant doc chunks if any exist for this org. Query string
+    // is the user's free-text context if provided, else the team/level
+    // signal. No-op without OPENAI_API_KEY or when nothing's been ingested.
+    const ragQuery = (
+      input.context ??
+      [team?.name, input.level, "objectives", "metrics"].filter(Boolean).join(" ")
+    ).slice(0, 1000);
+    const ragChunks = await retrieveContext(ctx.orgId, ragQuery, 6);
+
     // User message carries per-request context. System prompt stays stable
     // across calls so the prefix caches.
     const userContext = [
@@ -61,6 +71,7 @@ export const POST = withAuth<z.infer<typeof Input>>({
             .join("\n")}`
         : "No existing objectives yet — this is a clean slate.",
       input.context ? `\nAdditional context from user:\n${input.context}` : null,
+      formatChunksForPrompt(ragChunks),
       `\nDraft ${input.level}-level objectives.`,
     ]
       .filter(Boolean)
