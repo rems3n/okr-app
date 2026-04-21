@@ -5,6 +5,7 @@ import { checkStaleIntegrations } from "@/inngest/check-stale-integrations";
 import { processDocSync } from "@/inngest/process-doc-sync";
 import { processNangoSync } from "@/inngest/process-nango-sync";
 import { sendCheckInReminder } from "@/inngest/send-check-in-reminder";
+import { weeklyRiskAnalyst } from "@/inngest/weekly-risk-analyst";
 
 export const { GET, POST, PUT } = serve({
   client: inngest,
@@ -13,5 +14,6 @@ export const { GET, POST, PUT } = serve({
     processNangoSync,
     processDocSync,
     checkStaleIntegrations,
+    weeklyRiskAnalyst,
   ],
 });
