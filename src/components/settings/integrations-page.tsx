@@ -11,8 +11,10 @@ import { can, type Role } from "@/lib/auth/permissions";
 import { cn } from "@/lib/utils";
 
 export function IntegrationsPage({ currentRole }: { currentRole: Role }) {
-  const { integrations, isLoading, mutate } = useAvailableIntegrations();
+  const { integrations, nangoConfigured, isLoading, mutate } =
+    useAvailableIntegrations();
   const canConnect = can(currentRole, "integrations.connect");
+  const canAdmin = can(currentRole, "team.manage");
   const [error, setError] = useState<string | null>(null);
 
   const connect = async (provider: AvailableIntegration) => {
@@ -85,6 +87,48 @@ export function IntegrationsPage({ currentRole }: { currentRole: Role }) {
         <p className="text-sm text-red-500 border border-red-200 dark:border-red-900 rounded-md px-3 py-2 bg-red-50 dark:bg-red-950/40">
           {error}
         </p>
+      )}
+
+      {!isLoading && !nangoConfigured && (
+        <div className="rounded-md border border-amber-200 dark:border-amber-900 bg-amber-50 dark:bg-amber-950/40 px-4 py-3 space-y-2 text-sm">
+          <p className="font-medium text-amber-900 dark:text-amber-200">
+            Nango isn&apos;t configured yet
+          </p>
+          <p className="text-amber-800/80 dark:text-amber-300/80">
+            Integrations run through Nango. Connecting any provider below
+            will fail until the server has Nango credentials.
+          </p>
+          {canAdmin ? (
+            <ol className="list-decimal list-inside text-xs text-amber-800/80 dark:text-amber-300/80 space-y-0.5">
+              <li>
+                Create a project at{" "}
+                <a
+                  className="underline"
+                  href="https://app.nango.dev"
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  app.nango.dev
+                </a>
+                .
+              </li>
+              <li>
+                In Railway &rarr; okr-app &rarr; Variables, set{" "}
+                <code>NANGO_SECRET_KEY</code>,{" "}
+                <code>NEXT_PUBLIC_NANGO_PUBLIC_KEY</code>, and{" "}
+                <code>NANGO_WEBHOOK_SECRET</code>.
+              </li>
+              <li>
+                Point Nango&apos;s webhook URL at{" "}
+                <code>/api/webhooks/nango</code> on this deploy and redeploy.
+              </li>
+            </ol>
+          ) : (
+            <p className="text-xs text-amber-800/80 dark:text-amber-300/80">
+              Ask an admin to finish Nango setup.
+            </p>
+          )}
+        </div>
       )}
 
       {isLoading ? (

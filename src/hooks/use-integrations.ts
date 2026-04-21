@@ -18,12 +18,24 @@ export type AvailableIntegration = {
   } | null;
 };
 
+type AvailableIntegrationsResponse = {
+  providers: AvailableIntegration[];
+  nangoConfigured: boolean;
+};
+
 export function useAvailableIntegrations() {
-  const { data, error, isLoading, mutate } = useSWR<AvailableIntegration[]>(
-    "/api/v1/integrations/available",
-    apiGet,
-  );
-  return { integrations: data ?? [], error, isLoading, mutate };
+  const { data, error, isLoading, mutate } =
+    useSWR<AvailableIntegrationsResponse>(
+      "/api/v1/integrations/available",
+      apiGet,
+    );
+  return {
+    integrations: data?.providers ?? [],
+    nangoConfigured: data?.nangoConfigured ?? true,
+    error,
+    isLoading,
+    mutate,
+  };
 }
 
 export function useMetricCatalog(provider: string | null) {

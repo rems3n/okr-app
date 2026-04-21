@@ -1,6 +1,7 @@
 import { OrganizationSwitcher, UserButton } from "@clerk/nextjs";
 
 import { NewMenu } from "@/components/layout/new-menu";
+import { SearchPalette } from "@/components/layout/search-palette";
 import { NotificationBell } from "@/components/notifications/notification-bell";
 
 export function Header({ userId }: { userId: string }) {
@@ -16,6 +17,7 @@ export function Header({ userId }: { userId: string }) {
         }}
       />
       <div className="flex items-center gap-3">
+        <SearchPalette />
         <NewMenu />
         <NotificationBell userId={userId} />
         <UserButton />
