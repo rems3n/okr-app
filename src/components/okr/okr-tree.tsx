@@ -26,13 +26,11 @@ function buildTree(items: Objective[]): Node[] {
 export function OkrTree({
   objectives,
   cycle,
-  onSelect,
   currentUserId,
   currentRole,
 }: {
   objectives: Objective[];
   cycle: Cycle | null;
-  onSelect?: (objective: Objective) => void;
   currentUserId: string;
   currentRole: Role;
 }) {
@@ -64,7 +62,6 @@ export function OkrTree({
             cycle={cycle}
             expanded={expanded}
             setExpanded={setExpanded}
-            onSelect={onSelect}
             currentUserId={currentUserId}
             currentRole={currentRole}
           />
@@ -80,7 +77,6 @@ function TreeRow({
   cycle,
   expanded,
   setExpanded,
-  onSelect,
   currentUserId,
   currentRole,
 }: {
@@ -89,7 +85,6 @@ function TreeRow({
   cycle: Cycle | null;
   expanded: Record<string, boolean>;
   setExpanded: React.Dispatch<React.SetStateAction<Record<string, boolean>>>;
-  onSelect?: (o: Objective) => void;
   currentUserId: string;
   currentRole: Role;
 }) {
@@ -105,7 +100,6 @@ function TreeRow({
         cycle={cycle}
         canEditObjective={isOwner || isAdmin}
         canEditKrs={isAdmin || isOwner}
-        onSelect={onSelect ? () => onSelect(node) : undefined}
         depth={depth}
         treeChevron={
           <ExpandChevron
@@ -127,7 +121,6 @@ function TreeRow({
               cycle={cycle}
               expanded={expanded}
               setExpanded={setExpanded}
-              onSelect={onSelect}
               currentUserId={currentUserId}
               currentRole={currentRole}
             />

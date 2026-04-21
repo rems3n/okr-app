@@ -111,14 +111,15 @@ export function ExpandableObjectiveRow({
             }}
             aria-expanded={expanded}
             aria-controls={label}
-            className="inline-flex h-6 w-6 items-center justify-center rounded-md text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-800"
+            className="inline-flex h-7 items-center gap-1 rounded-md px-2 text-xs text-zinc-600 dark:text-zinc-400 border border-zinc-200 dark:border-zinc-700 hover:bg-zinc-100 dark:hover:bg-zinc-800"
             title={expanded ? "Hide key results" : "Show key results"}
           >
             {expanded ? (
-              <ChevronDown className="h-4 w-4" />
+              <ChevronDown className="h-3.5 w-3.5" />
             ) : (
-              <ChevronRight className="h-4 w-4" />
+              <ChevronRight className="h-3.5 w-3.5" />
             )}
+            <span>KRs</span>
           </button>
         </div>
       </div>

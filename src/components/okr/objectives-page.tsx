@@ -8,7 +8,6 @@ import { useEffect, useMemo, useState } from "react";
 import { DraftAssistant } from "@/components/ai/draft-assistant";
 import { ExpandableObjectiveRow } from "@/components/okr/expandable-objective-row";
 import { OkrTree } from "@/components/okr/okr-tree";
-import { ObjectivePanel } from "@/components/okr/objective-panel";
 import { useCycles } from "@/hooks/use-cycles";
 import { useMembers } from "@/hooks/use-members";
 import { useObjectives } from "@/hooks/use-objectives";
@@ -49,7 +48,6 @@ export function ObjectivesPage({
   const wantDraft = searchParams.get("draft") === "1";
   const [creating, setCreating] = useState(() => wantCreate);
   const [draftOpen, setDraftOpen] = useState(() => wantDraft);
-  const [panelId, setPanelId] = useState<string | null>(null);
 
   // Strip the params after we've consumed them so reloads don't reopen.
   useEffect(() => {
@@ -210,7 +208,6 @@ export function ObjectivesPage({
         <OkrTree
           objectives={visibleForTree}
           cycle={cycle}
-          onSelect={(o) => setPanelId(o.id)}
           currentUserId={currentUserId}
           currentRole={currentRole}
         />
@@ -218,16 +215,10 @@ export function ObjectivesPage({
         <ListView
           objectives={filtered}
           cycle={cycle}
-          onSelect={(o) => setPanelId(o.id)}
           currentUserId={currentUserId}
           currentRole={currentRole}
         />
       )}
-
-      <ObjectivePanel
-        objectiveId={panelId}
-        onClose={() => setPanelId(null)}
-      />
 
       {draftOpen && effectiveCycleId && (
         <DraftAssistant
@@ -246,13 +237,11 @@ export function ObjectivesPage({
 function ListView({
   objectives,
   cycle,
-  onSelect,
   currentUserId,
   currentRole,
 }: {
   objectives: Objective[];
   cycle: { startDate: string; endDate: string } | null;
-  onSelect: (o: Objective) => void;
   currentUserId: string;
   currentRole: Role;
 }) {
@@ -275,7 +264,6 @@ function ListView({
             cycle={cycle}
             canEditObjective={isOwner || isAdmin}
             canEditKrs={isOwner || isAdmin}
-            onSelect={(id) => onSelect({ ...o, id })}
           />
         );
       })}
