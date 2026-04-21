@@ -114,12 +114,41 @@ export const PATCH = withAuth<
         : {}),
       ...(raw.sortOrder !== undefined ? { sortOrder: raw.sortOrder } : {}),
     };
-    const updated = await db.updateKeyResult(
-      kr.id,
-      patch,
-      ctx.userId,
-      editReason,
-    );
+    // If the PATCH changes currentValue, route it through createCheckIn so
+    // the transition is audited in Recent check-ins (and carries the last
+    // confidence forward). Version history only captures strategic fields
+    // — currentValue isn't one of them by design. We do this BEFORE
+    // updateKeyResult to avoid double-updating the value, and remove
+    // currentValue from the patch that updateKeyResult applies.
+    const newCurrentStr =
+      "currentValue" in patch ? (patch as { currentValue?: string }).currentValue : undefined;
+    const shouldCheckIn =
+      newCurrentStr !== undefined && Number(newCurrentStr) !== Number(kr.currentValue);
+    if (shouldCheckIn) {
+      const prev = await db.latestCheckInsFor([kr.id]);
+      const carriedConfidence = prev[0]?.confidence ?? "on_track";
+      await db.createCheckIn({
+        keyResultId: kr.id,
+        authorUserId: ctx.userId,
+        newValue: Number(newCurrentStr),
+        confidence: carriedConfidence,
+        source: "manual",
+      });
+    }
+    const patchForUpdate = { ...patch };
+    if (shouldCheckIn) {
+      delete (patchForUpdate as { currentValue?: string }).currentValue;
+    }
+
+    const updated =
+      Object.keys(patchForUpdate).length > 0
+        ? await db.updateKeyResult(
+            kr.id,
+            patchForUpdate,
+            ctx.userId,
+            editReason,
+          )
+        : await db.getKeyResultById(kr.id);
     if (!updated) throw new NotFoundError();
     await db.recomputeObjectiveProgress(kr.objectiveId);
     return updated;
