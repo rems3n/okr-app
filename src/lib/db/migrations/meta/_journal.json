@@ -57,6 +57,13 @@
       "when": 1776730179484,
       "tag": "0007_dapper_mesmero",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1776731582045,
+      "tag": "0008_smooth_sister_grimm",
+      "breakpoints": true
     }
   ]
 }

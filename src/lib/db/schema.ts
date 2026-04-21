@@ -493,6 +493,35 @@ export const keyResultScores = pgTable(
 
 export type KeyResultScore = typeof keyResultScores.$inferSelect;
 export type NewKeyResultScore = typeof keyResultScores.$inferInsert;
+
+export const cycleShareTokens = pgTable(
+  "cycle_share_tokens",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    cycleId: uuid("cycle_id")
+      .notNull()
+      .references(() => cycles.id, { onDelete: "cascade" }),
+    tokenHash: text("token_hash").notNull(),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    createdByUserId: uuid("created_by_user_id")
+      .notNull()
+      .references(() => users.id),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .default(sql`now()`),
+    revokedAt: timestamp("revoked_at", { withTimezone: true }),
+  },
+  (t) => [
+    uniqueIndex("uq_cycle_share_token_hash").on(t.tokenHash),
+    index("idx_cycle_share_cycle").on(t.cycleId),
+  ],
+);
+
+export type CycleShareToken = typeof cycleShareTokens.$inferSelect;
+export type NewCycleShareToken = typeof cycleShareTokens.$inferInsert;
 export type CheckIn = typeof checkIns.$inferSelect;
 export type NewCheckIn = typeof checkIns.$inferInsert;
 export type IntegrationConnected = typeof integrationsConnected.$inferSelect;

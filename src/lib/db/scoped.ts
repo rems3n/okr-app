@@ -691,6 +691,31 @@ export function scopedDb(organizationId: string, db: AnyDb = defaultDb) {
      * in or stale beyond `staleAfterDays`. Used by the check-in flow and the
      * dashboard's Needs Attention section.
      */
+    /**
+     * Every non-deleted KR in the cycle, joined with its objective + owner
+     * name. Used by the admin dashboard to compute confidence buckets and
+     * render the at-risk list without N+1.
+     */
+    async listKrsForCycle(cycleId: string) {
+      return db
+        .select({
+          kr: keyResults,
+          obj: objectives,
+          ownerName: users.name,
+        })
+        .from(keyResults)
+        .innerJoin(objectives, eq(objectives.id, keyResults.objectiveId))
+        .innerJoin(users, eq(users.id, keyResults.ownerUserId))
+        .where(
+          and(
+            eq(objectives.organizationId, organizationId),
+            eq(objectives.cycleId, cycleId),
+            isNull(keyResults.deletedAt),
+            isNull(objectives.deletedAt),
+          ),
+        );
+    },
+
     async listKrsNeedingCheckIn(
       userId: string,
       cycleId: string,

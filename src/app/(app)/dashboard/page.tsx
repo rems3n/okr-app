@@ -1,6 +1,9 @@
 import Link from "next/link";
 
 import { AiSummaryCard } from "@/components/ai/summary-card";
+import { ActivityFeed } from "@/components/dashboard/activity-feed";
+import { AtRiskList, type AtRiskKrRow } from "@/components/dashboard/at-risk-list";
+import { KpiRow } from "@/components/dashboard/kpi-row";
 import {
   LevelIcon,
   PaceDot,
@@ -9,6 +12,8 @@ import {
 import { getAuthContext } from "@/lib/auth/get-current-user";
 import { scopedDb } from "@/lib/db/scoped";
 import { pace, type Pace } from "@/lib/okr/progress";
+
+type Confidence = "on_track" | "at_risk" | "off_track" | "no_data";
 
 function daysBetween(from: Date, to: Date): number {
   return Math.max(
@@ -47,10 +52,18 @@ export default async function DashboardPage() {
   }
 
   const currentCycle = active ?? cycles[0];
-  const [objectives, pendingKrs] = await Promise.all([
-    db.listObjectives({ cycleId: currentCycle.id }),
-    db.listKrsNeedingCheckIn(ctx.userId, currentCycle.id),
-  ]);
+  const isAdmin = ctx.role === "owner" || ctx.role === "admin";
+
+  const [objectives, pendingKrs, krsForCycle, scoreCoverage] =
+    await Promise.all([
+      db.listObjectives({ cycleId: currentCycle.id }),
+      db.listKrsNeedingCheckIn(ctx.userId, currentCycle.id),
+      isAdmin ? db.listKrsForCycle(currentCycle.id) : Promise.resolve([]),
+      isAdmin
+        ? db.scoreCoverageForCycle(currentCycle.id)
+        : Promise.resolve({ total: 0, scored: 0, unscoredKrIds: [] }),
+    ]);
+
   const daysRemaining = daysBetween(new Date(), new Date(currentCycle.endDate));
   const avgProgress =
     objectives.length > 0
@@ -63,13 +76,62 @@ export default async function DashboardPage() {
   const paceOf = (progress: number): Pace | "no_data" =>
     pace({ actualProgress: progress, cycleStart, cycleEnd }).status;
 
-  const isAdmin = ctx.role === "owner" || ctx.role === "admin";
   const topLevel = objectives.filter((o) => !o.parentObjectiveId);
   const needsAttention = objectives
     .filter((o) => paceOf(Number(o.progress)) === "behind")
     .sort((a, b) => Number(a.progress) - Number(b.progress))
     .slice(0, 5);
   const mine = objectives.filter((o) => o.ownerUserId === ctx.userId);
+
+  // Confidence buckets + at-risk list (admin only — uses extra query above)
+  let confidenceCounts: Record<Confidence, number> = {
+    on_track: 0,
+    at_risk: 0,
+    off_track: 0,
+    no_data: krsForCycle.length,
+  };
+  let atRiskRows: AtRiskKrRow[] = [];
+  if (isAdmin && krsForCycle.length > 0) {
+    const krIds = krsForCycle.map((r) => r.kr.id);
+    const latest = await db.latestCheckInsFor(krIds);
+    const byKr = new Map(latest.map((l) => [l.keyResultId, l]));
+    confidenceCounts = krsForCycle.reduce<Record<Confidence, number>>(
+      (acc, r) => {
+        const c = byKr.get(r.kr.id)?.confidence ?? "no_data";
+        acc[c] = (acc[c] ?? 0) + 1;
+        return acc;
+      },
+      { on_track: 0, at_risk: 0, off_track: 0, no_data: 0 },
+    );
+    const now = new Date().getTime();
+    const candidates: AtRiskKrRow[] = [];
+    for (const r of krsForCycle) {
+      const last = byKr.get(r.kr.id);
+      if (!last) continue;
+      if (last.confidence !== "at_risk" && last.confidence !== "off_track")
+        continue;
+      candidates.push({
+        id: r.kr.id,
+        title: r.kr.title,
+        objectiveId: r.obj.id,
+        objectiveTitle: r.obj.title,
+        confidence: last.confidence,
+        ownerName: r.ownerName,
+        daysSince: Math.floor(
+          (now - last.createdAt.getTime()) / (1000 * 60 * 60 * 24),
+        ),
+      });
+    }
+    const order = { off_track: 0, at_risk: 1 } as const;
+    candidates.sort((a, b) => {
+      if (a.confidence !== b.confidence)
+        return order[a.confidence] - order[b.confidence];
+      return (b.daysSince ?? 0) - (a.daysSince ?? 0);
+    });
+    atRiskRows = candidates.slice(0, 8);
+  }
+  const scoringActive =
+    currentCycle.status === "grading" || currentCycle.status === "closed";
 
   return (
     <section className="max-w-5xl space-y-6">
@@ -86,12 +148,22 @@ export default async function DashboardPage() {
           </p>
         </div>
         {objectives.length > 0 && (
-          <Link
-            href="/objectives?create=1"
-            className="rounded-md bg-zinc-900 text-white px-3 py-1.5 text-sm dark:bg-zinc-50 dark:text-zinc-900"
-          >
-            New objective
-          </Link>
+          <div className="flex items-center gap-2">
+            {isAdmin && (
+              <Link
+                href={`/cycles/${currentCycle.id}/board`}
+                className="rounded-md border border-zinc-200 dark:border-zinc-700 px-3 py-1.5 text-sm hover:bg-zinc-50 dark:hover:bg-zinc-900"
+              >
+                Board view
+              </Link>
+            )}
+            <Link
+              href="/objectives?create=1"
+              className="rounded-md bg-zinc-900 text-white px-3 py-1.5 text-sm dark:bg-zinc-50 dark:text-zinc-900"
+            >
+              New objective
+            </Link>
+          </div>
         )}
       </header>
 
@@ -138,7 +210,17 @@ export default async function DashboardPage() {
 
       {isAdmin ? (
         <>
+          <KpiRow
+            cycleProgress={avgProgress}
+            confidenceCounts={confidenceCounts}
+            totalKrs={krsForCycle.length}
+            pendingCheckIns={pendingKrs.length}
+            scoredKrs={scoreCoverage.scored}
+            scoringActive={scoringActive}
+          />
+          <AtRiskList rows={atRiskRows} />
           <AiSummaryCard cycleId={currentCycle.id} />
+          <ActivityFeed cycleId={currentCycle.id} />
           <ObjectivesPanel
             title="Company objectives"
             objectives={topLevel}
