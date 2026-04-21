@@ -702,13 +702,14 @@ function EditKrDialog({
     setBusy(true);
     setError(null);
     try {
-      const payload: Record<string, unknown> = { title };
-      if (progressMode === "manual") {
+      const payload: Record<string, unknown> = {};
+      // Only include fields the user actually changed — otherwise re-stringifying
+      // "10.0000" → 10 → "10" can trip the server's "target changed" check.
+      if (title !== kr.title) payload.title = title;
+      if (currentValue !== kr.currentValue) {
         payload.currentValue = Number(currentValue);
-      } else {
-        payload.currentValue = Number(currentValue);
-        payload.targetValue = Number(targetValue);
       }
+      if (targetChanged) payload.targetValue = Number(targetValue);
       if (modeChanged) {
         payload.progressMode = progressMode;
         if (progressMode === "auto") {

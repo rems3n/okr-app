@@ -43,9 +43,12 @@ export const PATCH = withAuth<
     }
     const cycle = await db.getCycleById(kr.objective.cycleId);
     if (cycle?.status === "active") {
+      // Compare numerically — kr.targetValue is a Drizzle numeric() string
+      // like "10.0000" and callers often send a rounded number. String
+      // comparison would flag "10" !== "10.0000" as a change.
       const targetChanged =
         input.targetValue !== undefined &&
-        input.targetValue.toString() !== kr.targetValue;
+        input.targetValue !== Number(kr.targetValue);
       if (targetChanged && !input.editReason) {
         throw new BadRequestError(
           "editReason is required when changing targetValue during an active cycle",
